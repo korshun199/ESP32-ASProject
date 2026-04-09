@@ -1,0 +1,11 @@
+# Arduino временные файлы
+/tmp/
+build/
+bin/
+
+# Конфиги с паролями (если появятся)
+config.json
+
+# Системные файлы
+.DS_Store
+READMY.txt
