@@ -9,3 +9,4 @@ config.json
 # Системные файлы
 .DS_Store
 READMY.txt
+sync
