@@ -132,3 +132,26 @@ Run viewer:
 Open:
 
 `http://127.0.0.1:8080`
+
+## 2026-06-16: Mobile browser page
+
+Added a separate mobile-friendly page without changing the existing desktop interface.
+
+Routes:
+
+- `/` keeps the existing desktop browser viewer.
+- `/mobile` opens the mobile viewer.
+
+Mobile files:
+
+- `web_viewer/static/mobile.html`
+- `web_viewer/static/mobile.css`
+- `web_viewer/static/mobile.js`
+
+The mobile page uses the same WebSocket stream as the desktop page and displays:
+
+- sound point on a touch-friendly radar canvas
+- X/Y coordinates
+- MIC1/MIC2/MIC3 frequency values
+- MIC1/MIC2/MIC3 volume values
+- latest raw JSON frame

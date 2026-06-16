@@ -36,6 +36,12 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+
+
+@app.get("/mobile")
+def mobile() -> FileResponse:
+    return FileResponse(STATIC_DIR / "mobile.html")
+
 @app.get("/api/latest")
 def api_latest() -> JSONResponse:
     with latest_lock:
