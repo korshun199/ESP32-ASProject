@@ -94,3 +94,41 @@ Audio output:
 
 - GPIO25 / D25 through 1k resistor to headphone/speaker
 - Main audible tone follows strongest virtual microphone
+
+## 2026-06-16: Browser visualization
+
+Added browser visualization architecture.
+
+### Data pipeline
+
+ESP32 sends JSON Lines over Serial:
+
+`DATA:{"freq":[...],"vol":[...],"x":...,"y":...}`
+
+Laptop server:
+
+- Python FastAPI
+- pyserial reads `/dev/ttyUSB0`
+- WebSocket sends latest frame to browser
+
+Browser:
+
+- HTML/CSS/JS
+- Canvas coordinate grid
+- Displays frequency array
+- Displays volume array
+- Displays calculated sound point X/Y
+
+### Run
+
+Upload JSON firmware:
+
+`./scripts/upload_3mic_json.sh`
+
+Run viewer:
+
+`./scripts/run_web_viewer.sh`
+
+Open:
+
+`http://127.0.0.1:8080`
