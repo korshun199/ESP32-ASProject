@@ -14,6 +14,14 @@ check_fail() {
   FAIL=$((FAIL+1))
 }
 
+check_file() {
+  if [ -f "$1" ]; then
+    check_ok "$1 exists"
+  else
+    check_fail "$1 missing"
+  fi
+}
+
 echo "=== ESP32-ASProject CHECK ==="
 echo
 
@@ -37,7 +45,7 @@ else
   check_ok "working tree clean"
 fi
 
-if git remote -v | grep -q github.com:korshun199/ESP32-ASProject.git; then
+if git remote -v | grep -q "github.com:korshun199/ESP32-ASProject.git"; then
   check_ok "GitHub remote OK"
 else
   check_fail "GitHub remote not expected"
@@ -73,13 +81,14 @@ fi
 
 echo
 echo "=== FILES ==="
-for f in scripts/project_check.sh docs/project-log.md; do
-  if [ -f "$f" ]; then
-    check_ok "$f exists"
-  else
-    check_fail "$f missing"
-  fi
-done
+check_file "scripts/project_check.sh"
+check_file "docs/project-log.md"
+check_file "firmware/tone_test/tone_test.ino"
+check_file "scripts/upload_tone_test.sh"
+check_file "firmware/sound_emulator/sound_emulator.ino"
+check_file "scripts/upload_sound_emulator.sh"
+check_file "firmware/three_mic_point/three_mic_point.ino"
+check_file "scripts/upload_3mic_point.sh"
 
 echo
 echo "=== SUMMARY ==="
