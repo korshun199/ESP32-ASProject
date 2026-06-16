@@ -1,0 +1,29 @@
+# Arduino временные файлы
+/tmp/
+build/
+bin/
+.gitignore
+# Конфиги с паролями (если появятся)
+config.json
+
+# Системные файлы
+.DS_Store
+READMY.txt
+sync
+# Python / web viewer local files
+__pycache__/
+*.pyc
+web_viewer/venv/
+web_viewer/__pycache__/
+
+# Python / web viewer local files
+__pycache__/
+*.pyc
+web_viewer/venv/
+web_viewer/__pycache__/
+
+# Python / web viewer local files
+__pycache__/
+*.pyc
+web_viewer/venv/
+web_viewer/__pycache__/

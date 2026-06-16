@@ -1,3 +1,4 @@
+import asyncio
 import json
 import threading
 import time
@@ -38,7 +39,8 @@ def index() -> FileResponse:
 @app.get("/api/latest")
 def api_latest() -> JSONResponse:
     with latest_lock:
-        return JSONResponse(latest_data)
+        payload = dict(latest_data)
+    return JSONResponse(payload)
 
 
 @app.websocket("/ws")
@@ -51,7 +53,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 payload = dict(latest_data)
 
             await websocket.send_text(json.dumps(payload, ensure_ascii=False))
-            time.sleep(0.05)
+            await asyncio.sleep(0.05)
 
     except WebSocketDisconnect:
         return
