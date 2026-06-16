@@ -155,3 +155,16 @@ The mobile page uses the same WebSocket stream as the desktop page and displays:
 - MIC1/MIC2/MIC3 frequency values
 - MIC1/MIC2/MIC3 volume values
 - latest raw JSON frame
+
+## 2026-06-16: Russian mobile interface
+
+The mobile viewer page was translated to Russian without changing the existing desktop viewer.
+
+Updated files:
+
+- `web_viewer/static/mobile.html`
+- `web_viewer/static/mobile.js`
+
+Route:
+
+- `/mobile`

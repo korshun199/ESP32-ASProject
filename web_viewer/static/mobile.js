@@ -35,8 +35,22 @@ let latest = {
   vol: [0, 0, 0],
   x: 0,
   y: 0,
-  status: "waiting",
+  status: "ожидание",
 };
+
+function translateStatus(status) {
+  if (!status) return "ожидание";
+
+  if (status === "online") return "онлайн";
+  if (status === "waiting") return "ожидание";
+  if (status === "connected") return "подключено";
+  if (status === "reconnect") return "переподключение";
+
+  if (String(status).startsWith("connecting")) return "подключение";
+  if (String(status).startsWith("serial error")) return "ошибка порта";
+
+  return status;
+}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -112,15 +126,15 @@ function drawRadar(data) {
 
   ctx.fillStyle = "#dbe7ff";
   ctx.font = `${Math.max(14, w * 0.04)}px system-ui`;
-  ctx.fillText(`X=${data.x} Y=${data.y}`, Math.max(12, w * 0.04), Math.max(26, w * 0.075));
+  ctx.fillText(`X=${data.x}  Y=${data.y}`, Math.max(12, w * 0.04), Math.max(26, w * 0.075));
 
   ctx.fillStyle = "#8d99ad";
   ctx.font = `${Math.max(11, w * 0.03)}px system-ui`;
-  ctx.fillText("MIC1 left · MIC2 right · MIC3 front", Math.max(12, w * 0.04), h - Math.max(14, w * 0.04));
+  ctx.fillText("М1 левый · М2 правый · М3 передний", Math.max(12, w * 0.04), h - Math.max(14, w * 0.04));
 }
 
 function updatePanel(data) {
-  statusEl.textContent = data.status || "online";
+  statusEl.textContent = translateStatus(data.status);
   xEl.textContent = data.x;
   yEl.textContent = data.y;
 
@@ -151,23 +165,24 @@ function connectWebSocket() {
   const ws = new WebSocket(url);
 
   ws.onopen = () => {
-    statusEl.textContent = "connected";
+    statusEl.textContent = "подключено";
   };
 
   ws.onmessage = (event) => {
     try {
       latest = JSON.parse(event.data);
     } catch (err) {
-      console.error("Bad websocket data:", err);
+      console.error("Ошибка данных WebSocket:", err);
     }
   };
 
   ws.onclose = () => {
-    statusEl.textContent = "reconnect";
+    statusEl.textContent = "переподключение";
     setTimeout(connectWebSocket, 1000);
   };
 
   ws.onerror = () => {
+    statusEl.textContent = "ошибка связи";
     ws.close();
   };
 }
