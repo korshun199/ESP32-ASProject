@@ -1,28 +1,27 @@
 /*
   ESP32-ASProject
-  Three microphone point emulator
+  Three microphone point emulator with stable terminal screen
 
-  Hardware:
-    AUDIO OUT:
-      GPIO25 / D25 -> resistor 1k -> headphone/speaker
-      GND          -> headphone/speaker second wire
+  AUDIO:
+    D25 / GPIO25 -> resistor 1k -> headphone/speaker
+    GND          -> headphone/speaker second wire
 
-    Virtual microphones:
-      MIC1 -> D34 / GPIO34
-      MIC2 -> D35 / GPIO35
-      MIC3 -> VP  / GPIO36
+  Virtual microphones:
+    MIC1 -> D34 / GPIO34
+    MIC2 -> D35 / GPIO35
+    MIC3 -> VP  / GPIO36
 
-    Each potentiometer:
-      edge pin   -> GND
-      middle pin -> MIC input
-      edge pin   -> 3.3V
+  Potentiometer connection:
+    edge pin   -> GND
+    middle pin -> MIC input
+    edge pin   -> 3.3V
 
-  Output format:
-    FREQ: M1=...Hz | M2=...Hz | M3=...Hz
-    VOL : M1=...   | M2=...   | M3=...
-    POINT: X=... Y=...
-    DIR: ...
-    GRID: ASCII coordinate field
+  Terminal output:
+    FREQ line
+    VOL line
+    POINT line
+    DIR line
+    ASCII grid
 */
 
 const int AUDIO_PIN = 25;
@@ -43,7 +42,7 @@ const int GRID_W = 21;
 const int GRID_H = 11;
 
 unsigned long lastPrintMs = 0;
-const unsigned long PRINT_INTERVAL_MS = 250;
+const unsigned long PRINT_INTERVAL_MS = 300;
 
 int clampInt(int value, int minValue, int maxValue) {
   if (value < minValue) return minValue;
@@ -56,22 +55,19 @@ int normalizeAdcToPoint(int value) {
   return map(value, -4095, 4095, -100, 100);
 }
 
+void clearScreenOnce() {
+  Serial.print("\033[2J");
+  Serial.print("\033[H");
+}
+
+void cursorHome() {
+  Serial.print("\033[H");
+}
+
 void readMicrophoneModel() {
   for (int i = 0; i < MIC_COUNT; i++) {
     int raw = analogRead(MIC_PINS[i]);
-
     micVolume[i] = raw;
-
-    /*
-      Educational model:
-      For now one potentiometer changes both:
-        - virtual volume
-        - virtual frequency
-
-      Later we can split it:
-        - one ADC set for volume
-        - another source for frequency
-    */
     micFreq[i] = map(raw, 0, 4095, FREQ_MIN, FREQ_MAX);
   }
 }
@@ -88,10 +84,6 @@ int getPointY() {
 }
 
 int getMainToneFreq() {
-  /*
-    Sound output follows the strongest virtual microphone.
-    This gives audible feedback while turning resistors.
-  */
   int strongestIndex = 0;
 
   for (int i = 1; i < MIC_COUNT; i++) {
@@ -103,47 +95,62 @@ int getMainToneFreq() {
   return micFreq[strongestIndex];
 }
 
+void printFixedWidthInt(int value, int width) {
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%*d", width, value);
+  Serial.print(buf);
+}
+
+void printSignedInt(int value, int width) {
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%+*d", width, value);
+  Serial.print(buf);
+}
+
 void printFreqLine() {
   Serial.print("FREQ: ");
   Serial.print("M1=");
-  Serial.print(micFreq[0]);
+  printFixedWidthInt(micFreq[0], 4);
   Serial.print("Hz | M2=");
-  Serial.print(micFreq[1]);
+  printFixedWidthInt(micFreq[1], 4);
   Serial.print("Hz | M3=");
-  Serial.print(micFreq[2]);
-  Serial.println("Hz");
+  printFixedWidthInt(micFreq[2], 4);
+  Serial.println("Hz     ");
 }
 
 void printVolumeLine() {
   Serial.print("VOL : ");
   Serial.print("M1=");
-  Serial.print(micVolume[0]);
-  Serial.print("  | M2=");
-  Serial.print(micVolume[1]);
-  Serial.print("  | M3=");
-  Serial.println(micVolume[2]);
+  printFixedWidthInt(micVolume[0], 4);
+  Serial.print("   | M2=");
+  printFixedWidthInt(micVolume[1], 4);
+  Serial.print("   | M3=");
+  printFixedWidthInt(micVolume[2], 4);
+  Serial.println("       ");
 }
 
 void printDirection(int x, int y) {
-  Serial.print("DIR: ");
+  Serial.print("DIR : ");
 
   if (x < -20) {
-    Serial.print("LEFT ");
+    Serial.print("LEFT     ");
   } else if (x > 20) {
-    Serial.print("RIGHT ");
+    Serial.print("RIGHT    ");
   } else {
     Serial.print("CENTER-X ");
   }
 
+  Serial.print(" / ");
+
   if (y < -20) {
-    Serial.print("BACK");
+    Serial.print("BACK     ");
   } else if (y > 20) {
-    Serial.print("FRONT");
+    Serial.print("FRONT    ");
   } else {
-    Serial.print("CENTER-Y");
+    Serial.print("CENTER-Y ");
   }
 
-  Serial.println();
+  Serial.println("       ");
 }
 
 void printGrid(int x, int y) {
@@ -164,19 +171,49 @@ void printGrid(int x, int y) {
         Serial.print("*");
       } else if (row == centerRow && col == centerCol) {
         Serial.print("+");
-      } else if (row == centerRow || col == centerCol) {
-        Serial.print(".");
+      } else if (row == centerRow) {
+        Serial.print("-");
+      } else if (col == centerCol) {
+        Serial.print("|");
       } else {
         Serial.print(".");
       }
     }
-    Serial.println();
+    Serial.println("   ");
   }
+}
+
+void printScreen(int x, int y, int mainTone) {
+  cursorHome();
+
+  Serial.println("ESP32 THREE MIC POINT EMULATOR        ");
+  Serial.println("MIC1=D34  MIC2=D35  MIC3=VP/GPIO36   ");
+  Serial.println("AUDIO=D25                              ");
+  Serial.println("--------------------------------------");
+
+  printFreqLine();
+  printVolumeLine();
+
+  Serial.print("POINT: X=");
+  printSignedInt(x, 4);
+  Serial.print("  Y=");
+  printSignedInt(y, 4);
+  Serial.print("  MAIN_TONE=");
+  printFixedWidthInt(mainTone, 4);
+  Serial.println("Hz       ");
+
+  printDirection(x, y);
+  Serial.println("--------------------------------------");
+
+  printGrid(x, y);
+
+  Serial.println("--------------------------------------");
+  Serial.println("Turn potentiometers. Ctrl+C to exit.  ");
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(800);
 
   analogReadResolution(12);
 
@@ -184,14 +221,11 @@ void setup() {
   ledcWrite(AUDIO_PIN, 128);
   ledcWriteTone(AUDIO_PIN, 440);
 
-  Serial.println();
-  Serial.println("================================");
-  Serial.println("ESP32 three microphone point emulator");
-  Serial.println("MIC1 = D34 / GPIO34");
-  Serial.println("MIC2 = D35 / GPIO35");
-  Serial.println("MIC3 = VP  / GPIO36");
-  Serial.println("AUDIO = D25 / GPIO25");
-  Serial.println("================================");
+  clearScreenOnce();
+
+  Serial.println("Starting...");
+  delay(500);
+  clearScreenOnce();
 }
 
 void loop() {
@@ -201,6 +235,7 @@ void loop() {
   int y = getPointY();
 
   int mainTone = getMainToneFreq();
+
   ledcWriteTone(AUDIO_PIN, mainTone);
   ledcWrite(AUDIO_PIN, 128);
 
@@ -208,21 +243,6 @@ void loop() {
 
   if (now - lastPrintMs >= PRINT_INTERVAL_MS) {
     lastPrintMs = now;
-
-    Serial.println();
-    Serial.println("==============================");
-    printFreqLine();
-    printVolumeLine();
-
-    Serial.print("POINT: X=");
-    if (x >= 0) Serial.print("+");
-    Serial.print(x);
-
-    Serial.print(" Y=");
-    if (y >= 0) Serial.print("+");
-    Serial.println(y);
-
-    printDirection(x, y);
-    printGrid(x, y);
+    printScreen(x, y, mainTone);
   }
 }

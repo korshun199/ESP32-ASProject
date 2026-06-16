@@ -20,10 +20,6 @@ echo "===== PORT ====="
 ls -l "$PORT"
 
 echo
-echo "===== SKETCH ====="
-ls -l "$SKETCH_DIR"
-
-echo
 echo "===== COMPILE ====="
 arduino-cli compile --fqbn "$FQBN" "$SKETCH_DIR"
 
@@ -32,5 +28,5 @@ echo "===== UPLOAD ====="
 arduino-cli upload -p "$PORT" --fqbn "$FQBN" "$SKETCH_DIR"
 
 echo
-echo "===== MONITOR COMMAND ====="
+echo "===== MONITOR ====="
 echo "arduino-cli monitor -p $PORT -c baudrate=115200"
