@@ -2,6 +2,11 @@
 #include <WebServer.h>
 #include "wifi_config.h"
 
+IPAddress localIp(192, 168, 20, 77);
+IPAddress gatewayIp(192, 168, 20, 1);
+IPAddress subnetMask(255, 255, 255, 0);
+IPAddress dnsIp(192, 168, 20, 1);
+
 #define MIC_COUNT 5
 
 #define MIC1_PIN 32
@@ -236,6 +241,14 @@ void setup() {
   }
 
   WiFi.mode(WIFI_STA);
+
+  if (!WiFi.config(localIp, gatewayIp, subnetMask, dnsIp)) {
+    Serial.println("Static IP config FAILED");
+  } else {
+    Serial.print("Static IP configured: ");
+    Serial.println(localIp);
+  }
+
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   Serial.println();
