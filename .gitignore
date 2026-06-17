@@ -1,38 +1,6 @@
-# Arduino временные файлы
-/tmp/
 build/
-bin/
-.gitignore
-# Конфиги с паролями (если появятся)
-config.json
+.cache/
+*.tmp
+*.log
 
-# Системные файлы
-.DS_Store
-READMY.txt
-sync
-# Python / web viewer local files
-__pycache__/
-*.pyc
-web_viewer/venv/
-web_viewer/__pycache__/
-
-# Python / web viewer local files
-__pycache__/
-*.pyc
-web_viewer/venv/
-web_viewer/__pycache__/
-
-# Python / web viewer local files
-__pycache__/
-*.pyc
-web_viewer/venv/
-web_viewer/__pycache__/
-
-# Local Wi-Fi secrets for ESP32 direct Wi-Fi STA prototype
-firmware/esp32_direct_wifi_5mic_sta/wifi_config.h
-
-# Local Wi-Fi secrets for ESP32 real microphone selectable firmware
-firmware/esp32_real_mic_selectable_sta/wifi_config.h
-
-# Local Wi-Fi secrets for final ESP32 radar microphone firmware
 firmware/esp32_radar_real_mics/wifi_config.h
