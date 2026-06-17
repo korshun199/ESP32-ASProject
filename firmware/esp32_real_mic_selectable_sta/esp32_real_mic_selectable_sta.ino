@@ -3,44 +3,34 @@
 #include "wifi_config.h"
 
 /*
-  ESP32 real analog microphone test firmware.
+  ESP32 real analog microphone multi-channel firmware.
 
-  Подключение микрофонного модуля:
+  Подключение каждого аналогового микрофонного модуля:
     VCC -> 3.3V
     GND -> GND
-    OUT -> выбранный ACTIVE_MIC_PIN
+    OUT -> выбранный вход ESP32
 
-  ВАЖНО:
-    Раскомментируй только ОДНУ пару ACTIVE_MIC_PIN / ACTIVE_MIC_NAME.
-    Остальные оставь закомментированными.
+  Нужен именно аналоговый микрофонный модуль с усилителем:
+    MAX9814, MAX4466, SparkFun Electret Mic Breakout или похожий.
+
+  Голый электретный микрофон напрямую к ESP32 не подключать.
 */
 
-// ===== ВЫБОР ПОРТА МИКРОФОНА =====
+// =======================================================
+// ВЫБОР МИКРОФОНОВ
+// =======================================================
+// Раскомментируй нужные строки.
+// Интерфейс сам покажет все включенные микрофоны.
 
-//#define ACTIVE_MIC_PIN 32
-//#define ACTIVE_MIC_NAME "MIC1-D32-GPIO32"
+//#define USE_MIC1_D32
+//#define USE_MIC2_D33
+//#define USE_MIC3_D34
+#define USE_MIC4_D35
+//#define USE_MIC5_VN
 
-//#define ACTIVE_MIC_PIN 33
-//#define ACTIVE_MIC_NAME "MIC2-D33-GPIO33"
-
-//#define ACTIVE_MIC_PIN 34
-//#define ACTIVE_MIC_NAME "MIC3-D34-GPIO34"
-
-#define ACTIVE_MIC_PIN 35
-#define ACTIVE_MIC_NAME "MIC4-D35-GPIO35"
-
-//#define ACTIVE_MIC_PIN 39
-//#define ACTIVE_MIC_NAME "MIC5-VN-GPIO39"
-
-#ifndef ACTIVE_MIC_PIN
-#error "Раскомментируй один ACTIVE_MIC_PIN"
-#endif
-
-#ifndef ACTIVE_MIC_NAME
-#error "Раскомментируй один ACTIVE_MIC_NAME"
-#endif
-
-// ===== СТАТИЧЕСКИЙ АДРЕС ESP32 В ТВОЕЙ СЕТИ =====
+// =======================================================
+// СТАТИЧЕСКИЙ IP ESP32
+// =======================================================
 IPAddress localIp(192, 168, 20, 77);
 IPAddress gatewayIp(192, 168, 20, 1);
 IPAddress subnetMask(255, 255, 255, 0);
@@ -48,31 +38,41 @@ IPAddress dnsIp(192, 168, 20, 1);
 
 WebServer server(80);
 
-const unsigned long SAMPLE_WINDOW_US = 20000;   // 20 ms
-const int SAMPLE_DELAY_US = 80;                 // примерно 12.5 kHz на одном канале
+const int MAX_MICS = 5;
 
-int rawMin = 4095;
-int rawMax = 0;
-int rawCenter = 0;
-int amplitude = 0;
-int levelPercent = 0;
-unsigned long samplesCount = 0;
+int micPins[MAX_MICS];
+const char* micNames[MAX_MICS];
+int micCount = 0;
+
+int rawMinArr[MAX_MICS];
+int rawMaxArr[MAX_MICS];
+int centerArr[MAX_MICS];
+int amplitudeArr[MAX_MICS];
+int levelArr[MAX_MICS];
+unsigned long samplesArr[MAX_MICS];
+
 unsigned long frameCounter = 0;
 unsigned long lastMeasureMs = 0;
+
+const unsigned long SAMPLE_WINDOW_US = 10000;  // 10 ms на каждый активный микрофон
+const int SAMPLE_DELAY_US = 80;                // около 12.5 kHz на один канал
 
 const char page[] PROGMEM = R"HTML(
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ESP32 real mic</title>
+<title>ESP32 real microphones</title>
 <body style="margin:0;padding:14px;background:#101622;color:#eef;font-family:sans-serif">
-<h2>ESP32 · настоящий аналоговый микрофон</h2>
-<p>Режим одного активного микрофона. Порт выбирается в коде через ACTIVE_MIC_PIN.</p>
+<h2>ESP32 · настоящие аналоговые микрофоны</h2>
+<p>Показываются все микрофоны, включённые в прошивке через <b>USE_MIC...</b>.</p>
 
-<canvas id="c" width="360" height="180" style="background:#05070d;border:1px solid #555;width:100%;max-width:520px"></canvas>
+<canvas id="c" width="380" height="380" style="background:#05070d;border:1px solid #555;width:100%;max-width:520px"></canvas>
 
-<h3 id="name">MIC</h3>
-<div id="info">waiting...</div>
+<h3>Активные микрофоны</h3>
+<div id="mics">waiting...</div>
+
+<h3>Координаты</h3>
+<div id="xy">X=0 Y=0</div>
 
 <h3>JSON</h3>
 <pre id="p">waiting...</pre>
@@ -81,31 +81,75 @@ const char page[] PROGMEM = R"HTML(
 const c=document.getElementById("c");
 const ctx=c.getContext("2d");
 const p=document.getElementById("p");
-const info=document.getElementById("info");
-const nameBox=document.getElementById("name");
+const mics=document.getElementById("mics");
+const xy=document.getElementById("xy");
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function map(v,a,b,c,d){v=clamp(v,a,b);return c+(v-a)*(d-c)/(b-a);}
 
-function draw(d){
+function bar(label,value,maxValue){
+  const w=map(value,0,maxValue,0,100);
+  return `
+    <div style="margin-top:6px">${label}: ${value}</div>
+    <div style="height:9px;background:#333;border-radius:10px;overflow:hidden">
+      <div style="height:9px;width:${w}%;background:#ffcf4a"></div>
+    </div>
+  `;
+}
+
+function drawRadar(d){
   ctx.fillStyle="#05070d";
-  ctx.fillRect(0,0,360,180);
+  ctx.fillRect(0,0,380,380);
 
   ctx.strokeStyle="#334";
   ctx.beginPath();
-  ctx.moveTo(0,90);
-  ctx.lineTo(360,90);
+  ctx.moveTo(190,0);
+  ctx.lineTo(190,380);
+  ctx.moveTo(0,190);
+  ctx.lineTo(380,190);
   ctx.stroke();
 
-  let w=map(d.level_percent,0,100,0,340);
+  for(let r=50;r<=170;r+=40){
+    ctx.beginPath();
+    ctx.arc(190,190,r,0,Math.PI*2);
+    ctx.stroke();
+  }
+
+  let px=190+map(d.x,-100,100,-160,160);
+  let py=190-map(d.y,-100,100,-160,160);
+
   ctx.fillStyle="#ffcf4a";
-  ctx.fillRect(10,70,w,40);
+  ctx.beginPath();
+  ctx.arc(px,py,14,0,Math.PI*2);
+  ctx.fill();
 
   ctx.fillStyle="#eef";
-  ctx.fillText("amplitude: "+d.amplitude,10,25);
-  ctx.fillText("level: "+d.level_percent+"%",10,45);
-  ctx.fillText("raw min/max: "+d.raw_min+" / "+d.raw_max,10,135);
-  ctx.fillText("center: "+d.center,10,155);
+  ctx.fillText("X="+d.x+" Y="+d.y,12,24);
+  ctx.fillText("mics="+d.count,12,44);
+}
+
+function renderMics(d){
+  let html="";
+  for(let i=0;i<d.count;i++){
+    html += `
+      <div style="margin:10px 0;padding:12px;background:#182033;border-radius:12px">
+        <b>${d.names[i]}</b>
+        <div>GPIO: ${d.pins[i]}</div>
+        ${bar("Amplitude", d.amplitude[i], 1800)}
+        ${bar("Level %", d.level_percent[i], 100)}
+        <div style="margin-top:6px">Min: ${d.raw_min[i]}</div>
+        <div>Max: ${d.raw_max[i]}</div>
+        <div>Center: ${d.center[i]}</div>
+        <div>Samples: ${d.samples[i]}</div>
+      </div>
+    `;
+  }
+
+  if(d.count === 0){
+    html = "<b>Нет активных микрофонов. Раскомментируй USE_MIC...</b>";
+  }
+
+  mics.innerHTML=html;
 }
 
 async function loop(){
@@ -113,36 +157,76 @@ async function loop(){
     const r=await fetch("/api/latest?t="+Date.now(), {cache:"no-store"});
     const d=await r.json();
 
-    nameBox.textContent=d.mic_name + " / GPIO" + d.pin;
-    info.innerHTML =
-      "<b>Amplitude:</b> "+d.amplitude+
-      "<br><b>Level:</b> "+d.level_percent+"%"+
-      "<br><b>Min:</b> "+d.raw_min+
-      "<br><b>Max:</b> "+d.raw_max+
-      "<br><b>Center:</b> "+d.center+
-      "<br><b>Samples:</b> "+d.samples;
-
     p.textContent=JSON.stringify(d,null,2);
-    draw(d);
+    xy.textContent="X="+d.x+" Y="+d.y;
+    drawRadar(d);
+    renderMics(d);
   }catch(e){
     p.textContent="нет связи: "+e;
   }
-  setTimeout(loop,100);
+  setTimeout(loop,200);
 }
+
 loop();
 </script>
 </body>
 )HTML";
 
-void measureMicrophone() {
+void addMic(int pin, const char* name) {
+  if (micCount >= MAX_MICS) return;
+
+  micPins[micCount] = pin;
+  micNames[micCount] = name;
+
+  rawMinArr[micCount] = 4095;
+  rawMaxArr[micCount] = 0;
+  centerArr[micCount] = 0;
+  amplitudeArr[micCount] = 0;
+  levelArr[micCount] = 0;
+  samplesArr[micCount] = 0;
+
+  micCount++;
+}
+
+void setupMicList() {
+#ifdef USE_MIC1_D32
+  addMic(32, "MIC1-D32-GPIO32");
+#endif
+
+#ifdef USE_MIC2_D33
+  addMic(33, "MIC2-D33-GPIO33");
+#endif
+
+#ifdef USE_MIC3_D34
+  addMic(34, "MIC3-D34-GPIO34");
+#endif
+
+#ifdef USE_MIC4_D35
+  addMic(35, "MIC4-D35-GPIO35");
+#endif
+
+#ifdef USE_MIC5_VN
+  addMic(39, "MIC5-VN-GPIO39");
+#endif
+}
+
+int levelFromAmplitude(int amp) {
+  int level = map(amp, 0, 1800, 0, 100);
+  if (level < 0) level = 0;
+  if (level > 100) level = 100;
+  return level;
+}
+
+void measureOneMic(int index) {
+  int pin = micPins[index];
+
   int minVal = 4095;
   int maxVal = 0;
   unsigned long count = 0;
-
   unsigned long startUs = micros();
 
   while ((micros() - startUs) < SAMPLE_WINDOW_US) {
-    int v = analogRead(ACTIVE_MIC_PIN);
+    int v = analogRead(pin);
 
     if (v < minVal) minVal = v;
     if (v > maxVal) maxVal = v;
@@ -151,17 +235,94 @@ void measureMicrophone() {
     delayMicroseconds(SAMPLE_DELAY_US);
   }
 
-  rawMin = minVal;
-  rawMax = maxVal;
-  amplitude = rawMax - rawMin;
-  rawCenter = (rawMax + rawMin) / 2;
-  samplesCount = count;
+  rawMinArr[index] = minVal;
+  rawMaxArr[index] = maxVal;
+  centerArr[index] = (minVal + maxVal) / 2;
+  amplitudeArr[index] = maxVal - minVal;
+  levelArr[index] = levelFromAmplitude(amplitudeArr[index]);
+  samplesArr[index] = count;
+}
 
-  levelPercent = map(amplitude, 0, 1800, 0, 100);
-  if (levelPercent < 0) levelPercent = 0;
-  if (levelPercent > 100) levelPercent = 100;
+void measureAllMics() {
+  for (int i = 0; i < micCount; i++) {
+    measureOneMic(i);
+  }
 
   frameCounter++;
+}
+
+int findMicByPin(int pin) {
+  for (int i = 0; i < micCount; i++) {
+    if (micPins[i] == pin) return i;
+  }
+  return -1;
+}
+
+int getAmpByPin(int pin) {
+  int index = findMicByPin(pin);
+  if (index < 0) return 0;
+  return amplitudeArr[index];
+}
+
+int normCoord(long value) {
+  if (value < -1800) value = -1800;
+  if (value > 1800) value = 1800;
+  return (int)(value * 100L / 1800L);
+}
+
+int calcX() {
+  // Левая сторона: D32 + D34
+  // Правая сторона: D33 + D35
+  long left = ((long)getAmpByPin(32) + (long)getAmpByPin(34)) / 2L;
+  long right = ((long)getAmpByPin(33) + (long)getAmpByPin(35)) / 2L;
+
+  return normCoord(right - left);
+}
+
+int calcY() {
+  // Перед/центр: VN
+  // Зад/база: D34 + D35
+  long front = (long)getAmpByPin(39);
+  long rear = ((long)getAmpByPin(34) + (long)getAmpByPin(35)) / 2L;
+
+  return normCoord(front - rear);
+}
+
+void sendJsonArrayInts(const char* name, int* arr) {
+  server.sendContent("\"");
+  server.sendContent(name);
+  server.sendContent("\":[");
+
+  for (int i = 0; i < micCount; i++) {
+    if (i) server.sendContent(",");
+    server.sendContent(String(arr[i]));
+  }
+
+  server.sendContent("]");
+}
+
+void sendJsonArrayULongs(const char* name, unsigned long* arr) {
+  server.sendContent("\"");
+  server.sendContent(name);
+  server.sendContent("\":[");
+
+  for (int i = 0; i < micCount; i++) {
+    if (i) server.sendContent(",");
+    server.sendContent(String(arr[i]));
+  }
+
+  server.sendContent("]");
+}
+
+void sendJsonNames() {
+  server.sendContent("\"names\":[");
+  for (int i = 0; i < micCount; i++) {
+    if (i) server.sendContent(",");
+    server.sendContent("\"");
+    server.sendContent(micNames[i]);
+    server.sendContent("\"");
+  }
+  server.sendContent("]");
 }
 
 void handleRoot() {
@@ -169,46 +330,62 @@ void handleRoot() {
 }
 
 void handleLatest() {
-  String json;
-  json.reserve(600);
-
-  json += "{";
-  json += "\"mode\":\"real_mic_selectable_sta\",";
-  json += "\"mic_name\":\"";
-  json += ACTIVE_MIC_NAME;
-  json += "\",";
-  json += "\"pin\":";
-  json += ACTIVE_MIC_PIN;
-  json += ",";
-  json += "\"raw_min\":";
-  json += rawMin;
-  json += ",";
-  json += "\"raw_max\":";
-  json += rawMax;
-  json += ",";
-  json += "\"center\":";
-  json += rawCenter;
-  json += ",";
-  json += "\"amplitude\":";
-  json += amplitude;
-  json += ",";
-  json += "\"level_percent\":";
-  json += levelPercent;
-  json += ",";
-  json += "\"samples\":";
-  json += samplesCount;
-  json += ",";
-  json += "\"frame\":";
-  json += frameCounter;
-  json += ",";
-  json += "\"ip\":\"";
-  json += WiFi.localIP().toString();
-  json += "\",";
-  json += "\"status\":\"online\"";
-  json += "}";
+  int x = calcX();
+  int y = calcY();
 
   server.sendHeader("Cache-Control", "no-store");
-  server.send(200, "application/json; charset=utf-8", json);
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json; charset=utf-8", "");
+
+  server.sendContent("{");
+
+  server.sendContent("\"mode\":\"real_mic_multi_sta\",");
+  server.sendContent("\"count\":");
+  server.sendContent(String(micCount));
+  server.sendContent(",");
+
+  sendJsonNames();
+  server.sendContent(",");
+
+  sendJsonArrayInts("pins", micPins);
+  server.sendContent(",");
+
+  sendJsonArrayInts("raw_min", rawMinArr);
+  server.sendContent(",");
+
+  sendJsonArrayInts("raw_max", rawMaxArr);
+  server.sendContent(",");
+
+  sendJsonArrayInts("center", centerArr);
+  server.sendContent(",");
+
+  sendJsonArrayInts("amplitude", amplitudeArr);
+  server.sendContent(",");
+
+  sendJsonArrayInts("level_percent", levelArr);
+  server.sendContent(",");
+
+  sendJsonArrayULongs("samples", samplesArr);
+  server.sendContent(",");
+
+  server.sendContent("\"x\":");
+  server.sendContent(String(x));
+  server.sendContent(",");
+
+  server.sendContent("\"y\":");
+  server.sendContent(String(y));
+  server.sendContent(",");
+
+  server.sendContent("\"frame\":");
+  server.sendContent(String(frameCounter));
+  server.sendContent(",");
+
+  server.sendContent("\"ip\":\"");
+  server.sendContent(WiFi.localIP().toString());
+  server.sendContent("\",");
+
+  server.sendContent("\"status\":\"online\"");
+  server.sendContent("}");
 }
 
 void handleNotFound() {
@@ -220,7 +397,12 @@ void setup() {
   delay(300);
 
   analogReadResolution(12);
-  analogSetPinAttenuation(ACTIVE_MIC_PIN, ADC_11db);
+
+  setupMicList();
+
+  for (int i = 0; i < micCount; i++) {
+    analogSetPinAttenuation(micPins[i], ADC_11db);
+  }
 
   WiFi.mode(WIFI_STA);
 
@@ -234,11 +416,19 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   Serial.println();
-  Serial.println("===== ESP32 REAL MIC SELECTABLE STA =====");
-  Serial.print("Active mic: ");
-  Serial.println(ACTIVE_MIC_NAME);
-  Serial.print("GPIO: ");
-  Serial.println(ACTIVE_MIC_PIN);
+  Serial.println("===== ESP32 REAL MIC MULTI STA =====");
+  Serial.print("Active mic count: ");
+  Serial.println(micCount);
+
+  for (int i = 0; i < micCount; i++) {
+    Serial.print("MIC ");
+    Serial.print(i);
+    Serial.print(": ");
+    Serial.print(micNames[i]);
+    Serial.print(" GPIO");
+    Serial.println(micPins[i]);
+  }
+
   Serial.print("SSID: ");
   Serial.println(WIFI_SSID);
   Serial.print("Connecting");
@@ -286,20 +476,28 @@ void loop() {
 
   if (millis() - lastMeasureMs >= 50) {
     lastMeasureMs = millis();
-    measureMicrophone();
+    measureAllMics();
 
-    Serial.print("DATA:{\"mic\":\"");
-    Serial.print(ACTIVE_MIC_NAME);
-    Serial.print("\",\"pin\":");
-    Serial.print(ACTIVE_MIC_PIN);
-    Serial.print(",\"min\":");
-    Serial.print(rawMin);
-    Serial.print(",\"max\":");
-    Serial.print(rawMax);
-    Serial.print(",\"amp\":");
-    Serial.print(amplitude);
-    Serial.print(",\"level\":");
-    Serial.print(levelPercent);
+    Serial.print("DATA:{\"count\":");
+    Serial.print(micCount);
+    Serial.print(",\"amp\":[");
+
+    for (int i = 0; i < micCount; i++) {
+      if (i) Serial.print(",");
+      Serial.print(amplitudeArr[i]);
+    }
+
+    Serial.print("],\"level\":[");
+
+    for (int i = 0; i < micCount; i++) {
+      if (i) Serial.print(",");
+      Serial.print(levelArr[i]);
+    }
+
+    Serial.print("],\"x\":");
+    Serial.print(calcX());
+    Serial.print(",\"y\":");
+    Serial.print(calcY());
     Serial.print(",\"ip\":\"");
     Serial.print(WiFi.localIP());
     Serial.println("\"}");
