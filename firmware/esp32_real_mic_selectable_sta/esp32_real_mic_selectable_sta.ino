@@ -22,11 +22,11 @@
 // Раскомментируй нужные строки.
 // Интерфейс сам покажет все включенные микрофоны.
 
-//#define USE_MIC1_D32
-//#define USE_MIC2_D33
-//#define USE_MIC3_D34
+#define USE_MIC1_D32
+#define USE_MIC2_D33
+#define USE_MIC3_D34
 #define USE_MIC4_D35
-//#define USE_MIC5_VN
+#define USE_MIC5_VN
 
 // =======================================================
 // СТАТИЧЕСКИЙ IP ESP32
