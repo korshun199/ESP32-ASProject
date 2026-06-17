@@ -27,3 +27,6 @@ __pycache__/
 *.pyc
 web_viewer/venv/
 web_viewer/__pycache__/
+
+# Local Wi-Fi secrets for ESP32 direct Wi-Fi STA prototype
+firmware/esp32_direct_wifi_5mic_sta/wifi_config.h
