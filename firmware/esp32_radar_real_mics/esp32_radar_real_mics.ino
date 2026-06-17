@@ -3,7 +3,7 @@
 #include "wifi_config.h"
 
 /*
-  ESP32 real analog microphone multi-channel firmware.
+  ESP32 radar real analog microphone firmware.
 
   Подключение каждого аналогового микрофонного модуля:
     VCC -> 3.3V
@@ -63,7 +63,7 @@ const char page[] PROGMEM = R"HTML(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ESP32 real microphones</title>
 <body style="margin:0;padding:14px;background:#101622;color:#eef;font-family:sans-serif">
-<h2>ESP32 · настоящие аналоговые микрофоны</h2>
+<h2>ESP32 Radar · настоящие аналоговые микрофоны</h2>
 <p>Показываются все микрофоны, включённые в прошивке через <b>USE_MIC...</b>.</p>
 
 <canvas id="c" width="380" height="380" style="background:#05070d;border:1px solid #555;width:100%;max-width:520px"></canvas>
@@ -339,7 +339,7 @@ void handleLatest() {
 
   server.sendContent("{");
 
-  server.sendContent("\"mode\":\"real_mic_multi_sta\",");
+  server.sendContent("\"mode\":\"esp32_radar_real_mics\",");
   server.sendContent("\"count\":");
   server.sendContent(String(micCount));
   server.sendContent(",");
@@ -416,7 +416,7 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   Serial.println();
-  Serial.println("===== ESP32 REAL MIC MULTI STA =====");
+  Serial.println("===== ESP32 RADAR REAL MICS =====");
   Serial.print("Active mic count: ");
   Serial.println(micCount);
 

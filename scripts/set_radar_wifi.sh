@@ -3,9 +3,15 @@ set -e
 
 cd /home/work/ESP32-ASProject
 
-CONFIG="firmware/esp32_real_mic_selectable_sta/wifi_config.h"
+CONFIG="firmware/esp32_radar_real_mics/wifi_config.h"
 
-echo "===== ESP32 REAL MIC WIFI CONFIG ====="
+echo "===== ESP32 RADAR WIFI CONFIG ====="
+echo "This creates local Wi-Fi config:"
+echo "$CONFIG"
+echo
+echo "This file is ignored by Git and must NOT be committed."
+echo
+
 read -rp "Wi-Fi SSID: " WIFI_SSID
 read -rsp "Wi-Fi password: " WIFI_PASS
 echo
@@ -27,8 +33,8 @@ CFG
 chmod 600 "$CONFIG"
 
 echo
-echo "Created:"
+echo "===== CREATED ====="
 ls -lah "$CONFIG"
 echo
-echo "Now flash:"
-echo "  ./scripts/upload_real_mic_selectable.sh /dev/ttyUSB0"
+echo "Now flash with:"
+echo "  ./scripts/upload_radar_mics.sh /dev/ttyUSB0"
