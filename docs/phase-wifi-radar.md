@@ -39,3 +39,50 @@ ESP32 -> WiFi -> Android Browser
 
 Текущая цель:
 добиться устойчивой реакции графика на речь и хлопки, затем перейти к улучшению обработки сигнала.
+
+## 2026-06-24: Radar + ESP device probe checkpoint
+
+Зафиксирована рабочая точка:
+
+### ESP32 Wi-Fi Radar
+- Ветка: dev/esp32-direct-wifi-android
+- Плата: ESP32-D0WD-V3 / ESP32-WROOM-32
+- Порт: /dev/ttyUSB0
+- Flash: 4MB
+- Wi-Fi AP: ESP32-RADAR
+- URL: http://192.168.4.1
+- API: http://192.168.4.1/api/latest
+- Микрофон: MAX9814
+- Подключение MAX9814:
+  - G -> GND
+  - 5V+ -> 3.3V
+  - Dot -> GPIO34
+  - AR -> не подключать
+- Прошивка показывает:
+  - raw
+  - min
+  - max
+  - vol
+  - текущую громкость
+  - бегущий график громкости
+
+### ESP Device Probe
+Добавлен универсальный скрипт:
+
+scripts/esp_device_probe.sh
+
+Назначение:
+- определить неизвестную ESP-плату;
+- получить chip_id, MAC, flash_id;
+- сохранить полный дамп flash;
+- сохранить SHA256;
+- считать partitions.bin;
+- создать partitions.csv с русской шапкой;
+- создать partitions_raw.csv для скриптов;
+- создать flash_map.txt;
+- создать HTML-отчёт;
+- извлечь app/factory/OTA бинарники из flash в extracted/;
+- сохранить restore_commands.txt.
+
+Идея:
+воткнул неизвестную железку, запустил скрипт, получил паспорт устройства.
