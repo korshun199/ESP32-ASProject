@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Acoustic Radar</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#080c12;
+  color:#e8f1ff;
+}
+header{
+  padding:12px 14px;
+  background:#05070b;
+  border-bottom:1px solid #263447;
+}
+h1{margin:0;font-size:20px}
+small{color:#8fa3bd}
+.wrap{
+  display:grid;
+  grid-template-columns:1.4fr .6fr;
+  gap:10px;
+  padding:10px;
+}
+.panel{
+  background:#111923;
+  border:1px solid #263447;
+  border-radius:12px;
+  padding:10px;
+}
+canvas{
+  width:100%;
+  height:70vh;
+  display:block;
+  background:#02050a;
+  border:1px solid #263447;
+  border-radius:10px;
+}
+.controls{display:grid;gap:10px}
+button,input[type=file]{
+  width:100%;
+  padding:10px;
+  border-radius:8px;
+  border:1px solid #263447;
+  background:#1a2635;
+  color:#e8f1ff;
+}
+.row{
+  display:grid;
+  grid-template-columns:80px 1fr 54px;
+  gap:8px;
+  align-items:center;
+}
+input[type=range]{width:100%}
+.metricbox{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.metric{
+  padding:9px;
+  background:#081019;
+  border:1px solid #263447;
+  border-radius:8px;
+}
+.metric b{
+  display:block;
+  font-size:20px;
+  margin-top:4px;
+}
+.bar{
+  height:10px;
+  background:#071019;
+  border:1px solid #263447;
+  border-radius:999px;
+  overflow:hidden;
+}
+.fill{
+  height:100%;
+  width:0%;
+  background:#49d17d;
+}
+pre{
+  margin:0;
+  color:#9fb3cc;
+  white-space:pre-wrap;
+  font-size:13px;
+}
+@media(max-width:900px){
+  .wrap{grid-template-columns:1fr}
+  canvas{height:58vh}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Virtual Acoustic Radar</h1>
+  <small>Звуковой файл → виртуальные микрофоны → X/Y, частота, громкость</small>
+</header>
+
+<div class="wrap">
+  <section class="panel">
+    <canvas id="map" width="1000" height="700"></canvas>
+  </section>
+
+  <aside class="panel controls">
+    <input id="file" type="file" accept="audio/*">
+    <button id="playBtn">▶ Старт / пауза</button>
+    <button id="autoBtn">Авто-движение: выкл</button>
+
+    <div class="metricbox">
+      <div class="metric">X <b id="xOut">0.50</b></div>
+      <div class="metric">Y <b id="yOut">0.50</b></div>
+      <div class="metric">Частота <b id="freqOut">0 Hz</b></div>
+      <div class="metric">Громкость <b id="volOut">0%</b></div>
+    </div>
+
+    <div class="row">
+      <label>Src X</label>
+      <input id="srcX" type="range" min="0" max="1000" value="500">
+      <span id="srcXv">0.50</span>
+    </div>
+
+    <div class="row">
+      <label>Src Y</label>
+      <input id="srcY" type="range" min="0" max="1000" value="500">
+      <span id="srcYv">0.50</span>
+    </div>
+
+    <div class="row">
+      <label>Speed</label>
+      <input id="speed" type="range" min="1" max="100" value="25">
+      <span id="speedv">25</span>
+    </div>
+
+    <hr style="width:100%;border:0;border-top:1px solid #263447">
+
+    <div id="micControls"></div>
+
+    <hr style="width:100%;border:0;border-top:1px solid #263447">
+
+    <pre id="debug">Загрузи аудиофайл мотоцикла и нажми старт.</pre>
+  </aside>
+</div>
+
+<script>
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+
+const fileInput = document.getElementById('file');
+const playBtn = document.getElementById('playBtn');
+const autoBtn = document.getElementById('autoBtn');
+
+const srcX = document.getElementById('srcX');
+const srcY = document.getElementById('srcY');
+const speed = document.getElementById('speed');
+
+const srcXv = document.getElementById('srcXv');
+const srcYv = document.getElementById('srcYv');
+const speedv = document.getElementById('speedv');
+
+const xOut = document.getElementById('xOut');
+const yOut = document.getElementById('yOut');
+const freqOut = document.getElementById('freqOut');
+const volOut = document.getElementById('volOut');
+const debug = document.getElementById('debug');
+const micControls = document.getElementById('micControls');
+
+let audioCtx = null;
+let analyser = null;
+let sourceNode = null;
+let audioBuffer = null;
+let playing = false;
+let pausedAt = 0;
+let startedAt = 0;
+let autoMove = false;
+let t0 = performance.now();
+
+const mics = [
+  { id:1, name:'MIC1 LT', x:0.12, y:0.12, gain:1, level:0 },
+  { id:2, name:'MIC2 RT', x:0.88, y:0.12, gain:1, level:0 },
+  { id:3, name:'MIC3 LB', x:0.12, y:0.88, gain:1, level:0 },
+  { id:4, name:'MIC4 RB', x:0.88, y:0.88, gain:1, level:0 }
+];
+
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+function makeMicControls(){
+  micControls.innerHTML='';
+  for(const mic of mics){
+    const div=document.createElement('div');
+    div.style.marginBottom='10px';
+    div.innerHTML=`
+      <div class="row">
+        <label>${mic.name}</label>
+        <input id="gain${mic.id}" type="range" min="0" max="300" value="100">
+        <span id="gain${mic.id}v">1.00</span>
+      </div>
+      <div class="bar"><div class="fill" id="level${mic.id}"></div></div>
+    `;
+    micControls.appendChild(div);
+
+    const slider=div.querySelector('#gain'+mic.id);
+    const value=div.querySelector('#gain'+mic.id+'v');
+
+    slider.addEventListener('input',()=>{
+      mic.gain=Number(slider.value)/100;
+      value.textContent=mic.gain.toFixed(2);
+    });
+  }
+}
+
+function getSource(now){
+  if(!autoMove){
+    return {x:Number(srcX.value)/1000, y:Number(srcY.value)/1000};
+  }
+
+  const sp=Number(speed.value)/100;
+  const t=(now-t0)/1000*sp;
+  const x=0.5+0.38*Math.cos(t*1.7);
+  const y=0.5+0.30*Math.sin(t*1.1);
+
+  srcX.value=Math.round(x*1000);
+  srcY.value=Math.round(y*1000);
+
+  return {x,y};
+}
+
+function audioMetrics(){
+  if(!analyser || !audioCtx) return {rms:0, peakHz:0};
+
+  const n=analyser.fftSize;
+  const td=new Uint8Array(n);
+  analyser.getByteTimeDomainData(td);
+
+  let sum=0;
+  for(let i=0;i<n;i++){
+    const v=(td[i]-128)/128;
+    sum+=v*v;
+  }
+  const rms=Math.sqrt(sum/n);
+
+  const fd=new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(fd);
+
+  let max=0, idx=0;
+  for(let i=2;i<fd.length;i++){
+    if(fd[i]>max){max=fd[i];idx=i;}
+  }
+
+  return {
+    rms,
+    peakHz:Math.round(idx*audioCtx.sampleRate/analyser.fftSize)
+  };
+}
+
+function computeMics(src, rms){
+  let total=0, wx=0, wy=0;
+  const base=clamp(rms*3.5,0,1);
+
+  for(const mic of mics){
+    const dx=src.x-mic.x;
+    const dy=src.y-mic.y;
+    const d=Math.sqrt(dx*dx+dy*dy);
+
+    const distanceGain=1/(0.10+d*d*3.6);
+
+    const aimX=0.5-mic.x;
+    const aimY=0.5-mic.y;
+    const la=Math.sqrt(aimX*aimX+aimY*aimY)||1;
+    const lb=Math.sqrt(dx*dx+dy*dy)||1;
+    const dot=(aimX*dx+aimY*dy)/(la*lb);
+
+    const directional=clamp((dot+1)/2,0.15,1.0);
+
+    mic.level=clamp(base*distanceGain*directional*mic.gain,0,1);
+
+    const w=mic.level+0.0001;
+    total+=w;
+    wx+=mic.x*w;
+    wy+=mic.y*w;
+  }
+
+  return {
+    x: total ? wx/total : 0.5,
+    y: total ? wy/total : 0.5
+  };
+}
+
+function draw(src, est, rms, peakHz){
+  const w=canvas.width, h=canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  ctx.fillStyle='#02050a';
+  ctx.fillRect(0,0,w,h);
+
+  ctx.strokeStyle='#1b2a3b';
+  ctx.lineWidth=1;
+  for(let i=0;i<=10;i++){
+    const x=i*w/10, y=i*h/10;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+  }
+
+  for(const mic of mics){
+    const mx=mic.x*w, my=mic.y*h;
+
+    ctx.beginPath();
+    ctx.arc(mx,my,18+mic.level*44,0,Math.PI*2);
+    ctx.fillStyle=`rgba(73,209,125,${0.12+mic.level*0.6})`;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(mx,my,11,0,Math.PI*2);
+    ctx.fillStyle='#49d17d';
+    ctx.fill();
+
+    ctx.fillStyle='#e8f1ff';
+    ctx.font='18px Arial';
+    ctx.fillText(mic.name,mx+20,my-8);
+
+    ctx.fillStyle='#9fb3cc';
+    ctx.font='14px Arial';
+    ctx.fillText(`gain ${mic.gain.toFixed(2)} level ${Math.round(mic.level*100)}%`,mx+20,my+12);
+  }
+
+  const sx=src.x*w, sy=src.y*h;
+  ctx.beginPath();
+  ctx.arc(sx,sy,14,0,Math.PI*2);
+  ctx.fillStyle='#ffcf5a';
+  ctx.fill();
+
+  ctx.fillStyle='#ffcf5a';
+  ctx.font='bold 18px Arial';
+  ctx.fillText('SOURCE',sx+18,sy-12);
+
+  const ex=est.x*w, ey=est.y*h;
+  ctx.strokeStyle='#ff5f6d';
+  ctx.lineWidth=4;
+
+  ctx.beginPath();
+  ctx.arc(ex,ey,18,0,Math.PI*2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(ex-24,ey);
+  ctx.lineTo(ex+24,ey);
+  ctx.moveTo(ex,ey-24);
+  ctx.lineTo(ex,ey+24);
+  ctx.stroke();
+
+  ctx.fillStyle='#ff5f6d';
+  ctx.font='bold 18px Arial';
+  ctx.fillText('EST X/Y',ex+25,ey+6);
+
+  ctx.fillStyle='#e8f1ff';
+  ctx.font='20px Arial';
+  ctx.fillText(`Estimated X=${est.x.toFixed(3)} Y=${est.y.toFixed(3)}`,24,34);
+  ctx.fillText(`Volume=${Math.round(rms*100)}% Peak=${peakHz} Hz`,24,62);
+}
+
+function updateUI(src, est, rms, peakHz){
+  srcXv.textContent=src.x.toFixed(2);
+  srcYv.textContent=src.y.toFixed(2);
+  speedv.textContent=speed.value;
+
+  xOut.textContent=est.x.toFixed(2);
+  yOut.textContent=est.y.toFixed(2);
+  freqOut.textContent=peakHz+' Hz';
+  volOut.textContent=Math.round(rms*100)+'%';
+
+  for(const mic of mics){
+    const el=document.getElementById('level'+mic.id);
+    if(el) el.style.width=Math.round(mic.level*100)+'%';
+  }
+
+  debug.textContent=
+`source_x=${src.x.toFixed(3)}
+source_y=${src.y.toFixed(3)}
+estimated_x=${est.x.toFixed(3)}
+estimated_y=${est.y.toFixed(3)}
+peak_hz=${peakHz}
+volume=${rms.toFixed(4)}
+mic_levels=${mics.map(m=>m.name+':'+m.level.toFixed(3)).join(' ')}`;
+}
+
+async function loadAudio(file){
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  const data=await file.arrayBuffer();
+  audioBuffer=await audioCtx.decodeAudioData(data);
+  pausedAt=0;
+  debug.textContent=`Файл загружен: ${file.name}
+duration=${audioBuffer.duration.toFixed(2)} sec
+sampleRate=${audioBuffer.sampleRate}`;
+}
+
+function playPause(){
+  if(!audioBuffer){
+    alert('Сначала загрузи звуковой файл.');
+    return;
+  }
+
+  if(playing){
+    try{sourceNode.stop();}catch(e){}
+    pausedAt=audioCtx.currentTime-startedAt;
+    playing=false;
+    return;
+  }
+
+  sourceNode=audioCtx.createBufferSource();
+  sourceNode.buffer=audioBuffer;
+  sourceNode.loop=true;
+
+  analyser=audioCtx.createAnalyser();
+  analyser.fftSize=2048;
+  analyser.smoothingTimeConstant=0.72;
+
+  sourceNode.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  startedAt=audioCtx.currentTime-pausedAt;
+  sourceNode.start(0, pausedAt % audioBuffer.duration);
+  playing=true;
+}
+
+fileInput.addEventListener('change',async()=>{
+  const f=fileInput.files[0];
+  if(f) await loadAudio(f);
+});
+
+playBtn.addEventListener('click',async()=>{
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') await audioCtx.resume();
+  playPause();
+});
+
+autoBtn.addEventListener('click',()=>{
+  autoMove=!autoMove;
+  autoBtn.textContent=autoMove?'Авто-движение: вкл':'Авто-движение: выкл';
+});
+
+function frame(now){
+  const src=getSource(now);
+  const a=audioMetrics();
+  const est=computeMics(src,a.rms);
+  draw(src,est,a.rms,a.peakHz);
+  updateUI(src,est,a.rms,a.peakHz);
+  requestAnimationFrame(frame);
+}
+
+makeMicControls();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
