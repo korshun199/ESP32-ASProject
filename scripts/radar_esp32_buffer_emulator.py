@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import math
+import random
 import time
 import urllib.request
 import urllib.error
-import argparse
-import random
 
 MICS = [
     {"id": 1, "name": "MIC1 TOP",    "x": 0.50, "y": 0.08},
@@ -14,37 +14,25 @@ MICS = [
     {"id": 4, "name": "MIC4 LEFT",   "x": 0.08, "y": 0.50},
 ]
 
-
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
-
 def object_position(t):
-    # Медленное широкое движение по экрану.
-    x = 0.50 + 0.38 * math.sin(t * 0.43)
-    y = 0.50 + 0.34 * math.cos(t * 0.31 + 1.2)
-
-    # Маленькое живое смещение, чтобы объект не ходил как циркуль из канцелярии.
-    x += 0.05 * math.sin(t * 1.11)
-    y += 0.04 * math.cos(t * 0.97)
-
+    x = 0.50 + 0.36 * math.sin(t * 0.35)
+    y = 0.50 + 0.32 * math.cos(t * 0.27 + 1.1)
+    x += 0.04 * math.sin(t * 0.90)
+    y += 0.03 * math.cos(t * 0.75)
     return clamp(x, 0.06, 0.94), clamp(y, 0.06, 0.94)
 
-
-def mic_level_from_object(mic, ox, oy):
+def mic_level(mic, ox, oy):
     dx = ox - mic["x"]
     dy = oy - mic["y"]
     d2 = dx * dx + dy * dy
 
-    # Чем ближе объект к направлению/позиции микрофона, тем выше уровень.
-    level = 1.0 / (0.10 + d2 * 3.2)
+    level = 1.0 / (0.16 + d2 * 4.0)
     level = clamp(level, 0.0, 1.0)
-
-    # Небольшая дрожь измерений, как у реального АЦП.
-    level += random.uniform(-0.015, 0.015)
-
+    level += random.uniform(-0.01, 0.01)
     return clamp(level, 0.0, 1.0)
-
 
 def post_json(url, data):
     payload = json.dumps(data).encode("utf-8")
@@ -54,15 +42,13 @@ def post_json(url, data):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-
     with urllib.request.urlopen(req, timeout=2.0) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
-
 def main():
-    ap = argparse.ArgumentParser(description="ESP32 radar controller emulator")
+    ap = argparse.ArgumentParser(description="ESP32 radar buffer emulator")
     ap.add_argument("--server", default="http://127.0.0.1:8088", help="Radar server base URL")
-    ap.add_argument("--hz", type=float, default=20.0, help="Send rate")
+    ap.add_argument("--hz", type=float, default=20.0, help="Send frequency")
     args = ap.parse_args()
 
     url = args.server.rstrip("/") + "/api/esp32/push"
@@ -82,9 +68,8 @@ def main():
 
         mics = []
         for mic in MICS:
-            volume = mic_level_from_object(mic, ox, oy)
+            volume = mic_level(mic, ox, oy)
             raw = int(volume * 4095)
-
             mics.append({
                 "id": mic["id"],
                 "name": mic["name"],
@@ -93,8 +78,7 @@ def main():
             })
 
         seq += 1
-
-        msg = {
+        payload = {
             "seq": seq,
             "source": "esp32_emulator",
             "object": {
@@ -110,15 +94,20 @@ def main():
         }
 
         try:
-            post_json(url, msg)
-            line = "seq=%06d obj=(%.3f %.3f) " % (seq, ox, oy)
-            line += " ".join("M%d=%03d" % (m["id"], int(m["volume"] * 100)) for m in mics)
-            print(line, flush=True)
+            post_json(url, payload)
+            print(
+                "seq=%06d obj=(%.3f %.3f) %s" % (
+                    seq,
+                    ox,
+                    oy,
+                    " ".join("M%d=%03d" % (m["id"], int(m["volume"] * 100)) for m in mics),
+                ),
+                flush=True,
+            )
         except urllib.error.URLError as e:
             print("send error:", e, flush=True)
 
         time.sleep(delay)
-
 
 if __name__ == "__main__":
     main()
