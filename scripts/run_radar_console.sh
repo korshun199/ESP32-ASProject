@@ -14,10 +14,7 @@ if [ -z "$IP" ]; then
 fi
 
 echo
-echo "=== ESP32-ASProject / Virtual Acoustic Radar ==="
-echo
-echo "Server:"
-echo "  http://$IP:$PORT/"
+echo "=== Virtual Acoustic Radar ==="
 echo
 echo "T16 control:"
 echo "  http://$IP:$PORT/control.html?v=7"
@@ -25,7 +22,7 @@ echo
 echo "Tablet monitor:"
 echo "  http://$IP:$PORT/monitor.html?v=7"
 echo
-echo "Stop server:"
+echo "Stop:"
 echo "  Ctrl+C"
 echo
 
