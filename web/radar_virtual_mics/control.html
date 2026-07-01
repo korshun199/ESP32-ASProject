@@ -248,10 +248,10 @@ let randomVelocity = {x:0.006,y:0.004};
 let lastRandomMs = performance.now();
 
 const mics = [
-  {id:1,name:'MIC1 LT',x:0.12,y:0.12,volume:0.00,gain:1,level:0},
-  {id:2,name:'MIC2 RT',x:0.88,y:0.12,volume:0.00,gain:1,level:0},
-  {id:3,name:'MIC3 LB',x:0.12,y:0.88,volume:0.00,gain:1,level:0},
-  {id:4,name:'MIC4 RB',x:0.88,y:0.88,volume:0.00,gain:1,level:0}
+  {id:1,name:'MIC1 TOP',   x:0.50,y:0.08,volume:0.00,gain:1,level:0},
+  {id:2,name:'MIC2 RIGHT', x:0.92,y:0.50,volume:0.00,gain:1,level:0},
+  {id:3,name:'MIC3 BOTTOM',x:0.50,y:0.92,volume:0.00,gain:1,level:0},
+  {id:4,name:'MIC4 LEFT',  x:0.08,y:0.50,volume:0.00,gain:1,level:0}
 ];
 
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
