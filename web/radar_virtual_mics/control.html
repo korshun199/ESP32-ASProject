@@ -297,6 +297,14 @@ pre{
   font-size:12px;
   line-height:1.35;
   white-space:pre-wrap;
+  user-select:text;
+  cursor:text;
+  max-height:180px;
+  overflow:auto;
+  background:#03080d;
+  border:1px solid #263b50;
+  border-radius:8px;
+  padding:8px;
 }
 
 a{
@@ -345,6 +353,8 @@ a{
       <button id="playBtn" class="bigButton good">▶ Старт / пауза</button>
       <div style="height:8px"></div>
       <button id="autoBtn" class="bigButton warn">Авто-движение: выкл</button>
+      <div style="height:8px"></div>
+      <button id="testSignalBtn" class="bigButton">TEST SIGNAL: выкл</button>
       <div style="height:8px"></div>
       <button id="stopBtn" class="bigButton danger">■ Стоп / сброс</button>
     </section>
@@ -446,7 +456,9 @@ a{
 
     <div class="panel">
       <div class="panelTitle">Диагностика</div>
-      <pre id="debug">Загрузи аудиофайл мотоцикла.</pre>
+      <button id="copyDebugBtn">Копировать диагностику</button>
+      <div style="height:8px"></div>
+      <pre id="debug">Загрузи аудиофайл мотоцикла или включи TEST SIGNAL.</pre>
     </div>
   </section>
 </div>
@@ -459,6 +471,8 @@ const fileInput = document.getElementById('file');
 const playBtn = document.getElementById('playBtn');
 const stopBtn = document.getElementById('stopBtn');
 const autoBtn = document.getElementById('autoBtn');
+const testSignalBtn = document.getElementById('testSignalBtn');
+const copyDebugBtn = document.getElementById('copyDebugBtn');
 
 const centerBtn = document.getElementById('centerBtn');
 const leftPassBtn = document.getElementById('leftPassBtn');
@@ -499,6 +513,7 @@ let pausedAt = 0;
 let startedAt = 0;
 
 let autoMove = false;
+let testSignal = false;
 let motionMode = 'manual';
 let t0 = performance.now();
 
@@ -678,6 +693,7 @@ function makeMicControls(){
     slider.addEventListener('input',()=>{
       mic.gain = Number(slider.value) / 100;
       value.textContent = mic.gain.toFixed(2);
+      saveSettings();
     });
   }
 }
@@ -718,6 +734,13 @@ function getSource(now){
 }
 
 function audioMetrics(){
+  if(testSignal){
+    const t = performance.now() / 1000;
+    const fakeRms = 0.22 + 0.12 * Math.abs(Math.sin(t * 2.7));
+    const fakeFreq = Math.round(85 + 35 * Math.sin(t * 1.3));
+    return {rms:fakeRms, peakHz:fakeFreq};
+  }
+
   if(!analyser || !audioCtx){
     return {rms:0,peakHz:0};
   }
@@ -1014,8 +1037,10 @@ function stopAll(){
   playBtn.textContent = '▶ Старт / пауза';
 
   autoMove = false;
+  testSignal = false;
   motionMode = 'manual';
   autoBtn.textContent = 'Авто-движение: выкл';
+  testSignalBtn.textContent = 'TEST SIGNAL: выкл';
 
   setSource(0.5,0.5);
 }
@@ -1044,6 +1069,18 @@ autoBtn.addEventListener('click',()=>{
   motionMode = autoMove ? 'auto' : 'manual';
   autoBtn.textContent = autoMove ? 'Авто-движение: вкл' : 'Авто-движение: выкл';
   t0 = performance.now();
+});
+
+testSignalBtn.addEventListener('click',()=>{
+  testSignal = !testSignal;
+  testSignalBtn.textContent = testSignal ? 'TEST SIGNAL: вкл' : 'TEST SIGNAL: выкл';
+
+  if(testSignal && !autoMove){
+    autoMove = true;
+    motionMode = 'auto';
+    autoBtn.textContent = 'Авто-движение: вкл';
+    t0 = performance.now();
+  }
 });
 
 centerBtn.addEventListener('click',()=>{
@@ -1079,6 +1116,26 @@ srcY.addEventListener('input',()=>{
   motionMode = 'manual';
   autoBtn.textContent = 'Авто-движение: выкл';
   updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
+});
+
+copyDebugBtn.addEventListener('click', async ()=>{
+  const text = debug.textContent || '';
+
+  try{
+    await navigator.clipboard.writeText(text);
+    sendStatus.textContent = 'диагностика скопирована';
+    sendStatus.style.color = '#49d17d';
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+
+    sendStatus.textContent = 'диагностика скопирована';
+    sendStatus.style.color = '#49d17d';
+  }
 });
 
 function frame(now){
