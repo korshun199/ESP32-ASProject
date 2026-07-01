@@ -518,10 +518,10 @@ let motionMode = 'manual';
 let t0 = performance.now();
 
 const mics = [
-  {id:1,name:'MIC1 LT',x:0.12,y:0.12,gain:1,level:0},
-  {id:2,name:'MIC2 RT',x:0.88,y:0.12,gain:1,level:0},
-  {id:3,name:'MIC3 LB',x:0.12,y:0.88,gain:1,level:0},
-  {id:4,name:'MIC4 RB',x:0.88,y:0.88,gain:1,level:0}
+  {id:1,name:'MIC1 LT',x:0.12,y:0.12,gain:1,volume:0.50,level:0},
+  {id:2,name:'MIC2 RT',x:0.88,y:0.12,gain:1,volume:0.50,level:0},
+  {id:3,name:'MIC3 LB',x:0.12,y:0.88,gain:1,volume:0.50,level:0},
+  {id:4,name:'MIC4 RB',x:0.88,y:0.88,gain:1,volume:0.50,level:0}
 ];
 
 function clamp(v,a,b){
@@ -600,7 +600,8 @@ function getSettings(){
     sensitivity: Number(sensitivity.value),
     micGains: mics.map(m => ({
       id: m.id,
-      gain: m.gain
+      gain: m.gain,
+      volume: m.volume
     }))
   };
 }
@@ -630,6 +631,9 @@ function loadSettings(){
         if(mic && Number.isFinite(saved.gain)){
           mic.gain = saved.gain;
         }
+        if(mic && Number.isFinite(saved.volume)){
+          mic.volume = saved.volume;
+        }
       }
     }
 
@@ -650,6 +654,7 @@ function resetSettings(){
 
   for(const mic of mics){
     mic.gain = 1;
+    mic.volume = 0.5;
   }
 
   const gainSliders = document.querySelectorAll('[id^="gain"]');
@@ -658,8 +663,13 @@ function resetSettings(){
   }
 
   for(const mic of mics){
-    const value = document.getElementById('gain' + mic.id + 'v');
-    if(value) value.textContent = '1.00';
+    const gainValue = document.getElementById('gain' + mic.id + 'v');
+    const volSlider = document.getElementById('vol' + mic.id);
+    const volValue = document.getElementById('vol' + mic.id + 'v');
+
+    if(gainValue) gainValue.textContent = '1.00';
+    if(volSlider) volSlider.value = 50;
+    if(volValue) volValue.textContent = '50%';
   }
 
   setSource(0.5, 0.5);
@@ -676,19 +686,35 @@ function makeMicControls(){
     div.innerHTML = `
       <div class="row">
         <label>${mic.name}</label>
+        <input id="vol${mic.id}" type="range" min="0" max="100" value="50">
+        <span class="value" id="vol${mic.id}v">50%</span>
+      </div>
+
+      <div class="row">
+        <label>gain</label>
         <input id="gain${mic.id}" type="range" min="0" max="300" value="100">
         <span class="value" id="gain${mic.id}v">1.00</span>
       </div>
+
       <div class="bar"><div class="fill" id="level${mic.id}"></div></div>
       <div style="margin-top:5px;color:#8fa3bd;font-size:12px">
-        level: <span id="level${mic.id}txt">0%</span>
+        итоговый level: <span id="level${mic.id}txt">0%</span>
       </div>
     `;
 
     micControls.appendChild(div);
 
+    const volSlider = div.querySelector('#vol'+mic.id);
+    const volValue = div.querySelector('#vol'+mic.id+'v');
+
     const slider = div.querySelector('#gain'+mic.id);
     const value = div.querySelector('#gain'+mic.id+'v');
+
+    volSlider.addEventListener('input',()=>{
+      mic.volume = Number(volSlider.value) / 100;
+      volValue.textContent = Math.round(mic.volume * 100) + '%';
+      saveSettings();
+    });
 
     slider.addEventListener('input',()=>{
       mic.gain = Number(slider.value) / 100;
@@ -781,26 +807,17 @@ function computeMics(src,rms){
   let wx = 0;
   let wy = 0;
 
-  const sens = Number(sensitivity.value) / 100;
   const master = Number(masterGain.value) / 100;
-  const base = clamp(rms * sens * master,0,1);
 
+  /*
+    ВАЖНО:
+    Положение X/Y теперь считается именно от громкостей микрофонов.
+    mic.volume — основной ручной уровень микрофона.
+    mic.gain   — индивидуальная поправка/усиление.
+    master     — общий уровень.
+  */
   for(const mic of mics){
-    const dx = src.x - mic.x;
-    const dy = src.y - mic.y;
-    const d = Math.sqrt(dx*dx + dy*dy);
-
-    const distanceGain = 1 / (0.10 + d*d*3.6);
-
-    const aimX = 0.5 - mic.x;
-    const aimY = 0.5 - mic.y;
-    const la = Math.sqrt(aimX*aimX + aimY*aimY) || 1;
-    const lb = Math.sqrt(dx*dx + dy*dy) || 1;
-
-    const dot = (aimX*dx + aimY*dy) / (la*lb);
-    const directional = clamp((dot + 1) / 2,0.15,1.0);
-
-    mic.level = clamp(base * distanceGain * directional * mic.gain,0,1);
+    mic.level = clamp(mic.volume * mic.gain * master, 0, 1);
 
     const w = mic.level + 0.0001;
     total += w;
@@ -915,7 +932,7 @@ function drawRadar(state){
 
   ctx.fillStyle = '#ff5f6d';
   ctx.font = 'bold 17px Arial';
-  ctx.fillText('TARGET',ex+24,ey+6);
+  ctx.fillText('ЦЕЛЬ',ex+24,ey+6);
 
   // info
   ctx.fillStyle = '#dff4ff';
@@ -945,9 +962,14 @@ function updateUI(state){
 
     const bar = document.getElementById('level'+mic.id);
     const txt = document.getElementById('level'+mic.id+'txt');
+    const volSlider = document.getElementById('vol'+mic.id);
+    const volValue = document.getElementById('vol'+mic.id+'v');
 
     if(bar) bar.style.width = pct + '%';
     if(txt) txt.textContent = pct + '%';
+
+    if(volSlider) volSlider.value = Math.round(mic.volume * 100);
+    if(volValue) volValue.textContent = Math.round(mic.volume * 100) + '%';
   }
 
   debug.textContent =
@@ -962,7 +984,7 @@ freq=${state.audio.freq} Hz
 volume=${state.audio.volume.toFixed(4)}
 
 mics:
-${mics.map(m=>m.name+' gain='+m.gain.toFixed(2)+' level='+m.level.toFixed(3)).join('\n')}`;
+${mics.map(m=>m.name+' volume='+m.volume.toFixed(2)+' gain='+m.gain.toFixed(2)+' level='+m.level.toFixed(3)).join('\n')}`;
 }
 
 async function sendState(state){
@@ -1173,9 +1195,14 @@ loadSettings();
 for(const mic of mics){
   const slider = document.getElementById('gain' + mic.id);
   const value = document.getElementById('gain' + mic.id + 'v');
+  const volSlider = document.getElementById('vol' + mic.id);
+  const volValue = document.getElementById('vol' + mic.id + 'v');
 
   if(slider) slider.value = Math.round(mic.gain * 100);
   if(value) value.textContent = mic.gain.toFixed(2);
+
+  if(volSlider) volSlider.value = Math.round(mic.volume * 100);
+  if(volValue) volValue.textContent = Math.round(mic.volume * 100) + '%';
 }
 
 updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
@@ -1191,7 +1218,10 @@ sensitivity.addEventListener('change', saveSettings);
 
 for(const mic of mics){
   const slider = document.getElementById('gain' + mic.id);
+  const volSlider = document.getElementById('vol' + mic.id);
+
   if(slider) slider.addEventListener('change', saveSettings);
+  if(volSlider) volSlider.addEventListener('change', saveSettings);
 }
 
 requestAnimationFrame(frame);
