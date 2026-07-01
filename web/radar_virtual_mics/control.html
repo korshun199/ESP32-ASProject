@@ -242,9 +242,13 @@ let testSignal = false;
 let targetLocked = false;
 let target = {x:0.5,y:0.5};
 
+// Последняя реально нарисованная позиция объекта.
+// Захват мышкой должен работать по ней, а не пересчитывать объект заново.
+let lastObject = {visible:false, x:null, y:null, signal:0};
+
 let randomMotion = false;
 let randomObject = {x:0.5,y:0.5};
-let randomVelocity = {x:0.0045,y:0.0035};
+let randomVelocity = {x:0.0018,y:0.0014};
 let lastRandomMs = performance.now();
 
 const mics = [
@@ -379,7 +383,7 @@ function updateRandomObject(){
 
   // Увеличенный размах случайного движения.
   // Теперь объект ходит заметно по радару, а не изображает дрожащую точку.
-  const motionScale = 1.15;
+  const motionScale = 0.55;
 
   randomObject.x += randomVelocity.x * dt * motionScale;
   randomObject.y += randomVelocity.y * dt * motionScale;
@@ -396,11 +400,11 @@ function updateRandomObject(){
 
   // Чуть-чуть меняем траекторию, чтобы объект не был скучным, как отчёт бухгалтерии.
   const t = now / 1000;
-  randomVelocity.x += Math.sin(t * 1.7) * 0.000035;
-  randomVelocity.y += Math.cos(t * 1.3) * 0.000035;
+  randomVelocity.x += Math.sin(t * 1.7) * 0.000012;
+  randomVelocity.y += Math.cos(t * 1.3) * 0.000012;
 
-  randomVelocity.x = clamp(randomVelocity.x, -0.009, 0.009);
-  randomVelocity.y = clamp(randomVelocity.y, -0.009, 0.009);
+  randomVelocity.x = clamp(randomVelocity.x, -0.0035, 0.0035);
+  randomVelocity.y = clamp(randomVelocity.y, -0.0035, 0.0035);
 
   // Эмулируем громкости микрофонов от положения случайного объекта.
   for(const mic of mics){
@@ -526,7 +530,7 @@ function drawSearch(object){
     searchCtx.strokeStyle = '#ffe89a';
     searchCtx.lineWidth = 2;
     searchCtx.beginPath();
-    searchCtx.arc(ox,oy,20,0,Math.PI*2);
+    searchCtx.arc(ox,oy,28,0,Math.PI*2);
     searchCtx.stroke();
 
     searchCtx.fillStyle = '#ffcf5a';
@@ -540,7 +544,7 @@ function drawSearch(object){
     if(!targetLocked){
       searchCtx.fillStyle = '#8fa3bd';
       searchCtx.font = '13px Arial';
-      searchCtx.fillText('Кликни по жёлтому объекту для захвата цели', 12, h-14);
+      searchCtx.fillText('Кликни по жёлтому кругу: захват цели', 12, h-14);
     }
   }else{
     searchCtx.fillStyle = '#8fa3bd';
@@ -835,9 +839,10 @@ searchCanvas.addEventListener('click', e=>{
   const rect = searchCanvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / rect.width;
   const y = (e.clientY - rect.top) / rect.height;
-  const object = computeObject();
 
-  if(!object.visible){
+  const object = lastObject;
+
+  if(!object || !object.visible){
     return;
   }
 
@@ -845,9 +850,17 @@ searchCanvas.addEventListener('click', e=>{
   const dy = y-object.y;
   const d = Math.sqrt(dx*dx + dy*dy);
 
-  if(d < 0.10){
+  // Радиус захвата увеличен: оператор ловит объект, а не пиксельную блоху.
+  if(d < 0.16){
     targetLocked = true;
     target = {x:object.x,y:object.y};
+
+    // После захвата объект считается пойманным:
+    // случайное движение останавливается, а главный радар ставит объект в центр.
+    randomMotion = false;
+    randomBtn.textContent = 'Случайное движение: выкл';
+
+    forcedRender();
   }
 });
 
@@ -888,8 +901,8 @@ randomBtn.addEventListener('click',()=>{
     targetLocked = false;
     randomObject = {x:Math.random()*0.84 + 0.08, y:Math.random()*0.84 + 0.08};
     randomVelocity = {
-      x:(Math.random() > 0.5 ? 1 : -1) * (0.0035 + Math.random()*0.0045),
-      y:(Math.random() > 0.5 ? 1 : -1) * (0.0030 + Math.random()*0.0040)
+      x:(Math.random() > 0.5 ? 1 : -1) * (0.0014 + Math.random()*0.0018),
+      y:(Math.random() > 0.5 ? 1 : -1) * (0.0012 + Math.random()*0.0016)
     };
     lastRandomMs = performance.now();
     testSignal = true;
@@ -968,6 +981,8 @@ function forcedRender(){
   const audio = audioMetrics();
   const object = computeObject();
 
+  lastObject = object;
+
   drawSearch(object);
   drawMain(object);
   updateUi(object,audio);
@@ -977,6 +992,8 @@ function forcedRender(){
 function frame(){
   const audio = audioMetrics();
   const object = computeObject();
+
+  lastObject = object;
 
   drawSearch(object);
   drawMain(object);
