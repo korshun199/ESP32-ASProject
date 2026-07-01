@@ -202,6 +202,36 @@ function draw(state){
     ctx.fillText('СИГНАЛА НЕТ', 24, 44);
   }
 
+  // Диагностический HUD на планшетном мониторе
+  ctx.save();
+  ctx.globalAlpha = 0.88;
+  ctx.fillStyle = 'rgba(2, 10, 16, 0.72)';
+  ctx.strokeStyle = 'rgba(95, 215, 255, 0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(w - 280, 18, 255, 126, 10);
+  ctx.fill();
+  ctx.stroke();
+
+  const objHud = state.object || null;
+  const sig = objHud && objHud.signal ? objHud.signal : 0;
+  const micLine = Array.isArray(state.mics)
+    ? state.mics.map(m => 'M' + m.id + ':' + Math.round((m.level || 0) * 100)).join(' ')
+    : 'M: none';
+
+  ctx.fillStyle = '#5fd7ff';
+  ctx.font = 'bold 16px Arial';
+  ctx.fillText('ДИАГНОСТИКА', w - 262, 42);
+
+  ctx.font = '13px monospace';
+  ctx.fillStyle = '#bfefff';
+  ctx.fillText('OBJ X: ' + (objHud ? objHud.x.toFixed(3) : 'none'), w - 262, 64);
+  ctx.fillText('OBJ Y: ' + (objHud ? objHud.y.toFixed(3) : 'none'), w - 262, 82);
+  ctx.fillText('SIGNAL: ' + sig.toFixed(3), w - 262, 100);
+  ctx.fillText('LOCK: ' + (state.target && state.target.locked ? 'YES' : 'NO'), w - 262, 118);
+  ctx.fillText(micLine, w - 262, 136);
+  ctx.restore();
+
   if(state.target && state.target.locked){
     ctx.strokeStyle = '#ff5f6d';
     ctx.lineWidth = 5;

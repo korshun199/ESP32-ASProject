@@ -645,6 +645,37 @@ function drawMain(object){
     mainCtx.fillText(targetLocked ? 'ЗАХВАЧЕН' : 'ОБЪЕКТ', ox+20, oy-12);
   }
 
+  // Диагностический HUD на главном мониторе
+  mainCtx.save();
+  mainCtx.globalAlpha = 0.88;
+  mainCtx.fillStyle = 'rgba(2, 10, 16, 0.72)';
+  mainCtx.strokeStyle = 'rgba(95, 215, 255, 0.55)';
+  mainCtx.lineWidth = 1;
+  mainCtx.beginPath();
+  mainCtx.roundRect(w - 265, 18, 245, 138, 10);
+  mainCtx.fill();
+  mainCtx.stroke();
+
+  mainCtx.fillStyle = '#5fd7ff';
+  mainCtx.font = 'bold 15px Arial';
+  mainCtx.fillText('ДИАГНОСТИКА', w - 250, 42);
+
+  mainCtx.font = '13px monospace';
+  mainCtx.fillStyle = '#bfefff';
+
+  const hudX = object.visible ? object.x.toFixed(3) : 'none';
+  const hudY = object.visible ? object.y.toFixed(3) : 'none';
+  const hudSignal = object.signal ? object.signal.toFixed(3) : '0.000';
+
+  mainCtx.fillText('OBJ X: ' + hudX, w - 250, 64);
+  mainCtx.fillText('OBJ Y: ' + hudY, w - 250, 82);
+  mainCtx.fillText('SIGNAL: ' + hudSignal, w - 250, 100);
+  mainCtx.fillText('LOCK: ' + (targetLocked ? 'YES' : 'NO'), w - 250, 118);
+
+  const micLine = mics.map(m => 'M' + m.id + ':' + Math.round(m.level * 100)).join(' ');
+  mainCtx.fillText(micLine, w - 250, 140);
+  mainCtx.restore();
+
   if(targetLocked){
     mainCtx.strokeStyle = '#ff5f6d';
     mainCtx.lineWidth = 4;
