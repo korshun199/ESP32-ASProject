@@ -113,7 +113,7 @@ function draw(state){
   ctx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
   ctx.stroke();
 
-  const obj = state.object || state.source || {x:0.5,y:0.5};
+  const obj = state.display_object || state.object || state.source || {x:0.5,y:0.5};
   const ox = cx + (obj.x-0.5)*rMax*2;
   const oy = cy + (obj.y-0.5)*rMax*2;
 
@@ -130,7 +130,7 @@ function draw(state){
 
   ctx.fillStyle = '#ffcf5a';
   ctx.font = 'bold 18px Arial';
-  ctx.fillText('ОБЪЕКТ', ox+20, oy-10);
+  ctx.fillText(state.target && state.target.locked ? 'ЗАХВАЧЕН' : 'ОБЪЕКТ', ox+20, oy-10);
 
   if(state.target && state.target.locked){
     ctx.strokeStyle = '#ff5f6d';

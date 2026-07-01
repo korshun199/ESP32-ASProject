@@ -528,24 +528,28 @@ function drawMain(object){
   mainCtx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
   mainCtx.stroke();
 
-  // Жёлтый объект виден и в центральном окне радара
-  const ox = cx + (object.x-0.5)*rMax*2;
-  const oy = cy + (object.y-0.5)*rMax*2;
+  // Жёлтый объект виден и в центральном окне радара.
+  // Если цель захвачена, объект переносится в центр главного радара.
+  const displayX = targetLocked ? 0.5 : object.x;
+  const displayY = targetLocked ? 0.5 : object.y;
+
+  const ox = cx + (displayX-0.5)*rMax*2;
+  const oy = cy + (displayY-0.5)*rMax*2;
 
   mainCtx.beginPath();
-  mainCtx.arc(ox,oy,10,0,Math.PI*2);
+  mainCtx.arc(ox,oy,12,0,Math.PI*2);
   mainCtx.fillStyle = '#ffcf5a';
   mainCtx.fill();
 
   mainCtx.strokeStyle = '#ffe89a';
   mainCtx.lineWidth = 2;
   mainCtx.beginPath();
-  mainCtx.arc(ox,oy,18,0,Math.PI*2);
+  mainCtx.arc(ox,oy,22,0,Math.PI*2);
   mainCtx.stroke();
 
   mainCtx.fillStyle = '#ffcf5a';
   mainCtx.font = 'bold 15px Arial';
-  mainCtx.fillText('ОБЪЕКТ', ox+18, oy-10);
+  mainCtx.fillText(targetLocked ? 'ЗАХВАЧЕН' : 'ОБЪЕКТ', ox+20, oy-12);
 
   if(targetLocked){
     mainCtx.strokeStyle = '#ff5f6d';
@@ -604,6 +608,10 @@ locked=${targetLocked}
 x=${target.x.toFixed(3)}
 y=${target.y.toFixed(3)}
 
+main_display:
+x=${targetLocked ? '0.500' : object.x.toFixed(3)}
+y=${targetLocked ? '0.500' : object.y.toFixed(3)}
+
 random_motion=${randomMotion}
 random_object_x=${randomObject.x.toFixed(3)}
 random_object_y=${randomObject.y.toFixed(3)}
@@ -619,6 +627,7 @@ ${mics.map(m=>`${m.name} volume=${m.volume.toFixed(2)} gain=${m.gain.toFixed(2)}
 async function sendState(object,audio){
   const state = {
     object,
+    display_object: targetLocked ? {x:0.5,y:0.5} : object,
     target:{locked:targetLocked,x:target.x,y:target.y},
     estimate: targetLocked ? {x:0.5,y:0.5} : object,
     source: object,
