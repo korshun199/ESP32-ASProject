@@ -89,29 +89,92 @@ function draw(state){
   ctx.fillStyle = '#010509';
   ctx.fillRect(0,0,w,h);
 
-  ctx.strokeStyle = 'rgba(73,209,125,.25)';
-  ctx.lineWidth = 1;
+  // Фосфорное свечение поля радара
+  const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, rMax * 1.12);
+  glow.addColorStop(0.00, 'rgba(73,209,125,0.18)');
+  glow.addColorStop(0.45, 'rgba(73,209,125,0.07)');
+  glow.addColorStop(0.78, 'rgba(73,209,125,0.025)');
+  glow.addColorStop(1.00, 'rgba(73,209,125,0.00)');
 
+  ctx.beginPath();
+  ctx.arc(cx, cy, rMax * 1.08, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  // Внешний светящийся круг
+  ctx.save();
+  ctx.shadowColor = 'rgba(73,209,125,0.95)';
+  ctx.shadowBlur = 22;
+  ctx.strokeStyle = 'rgba(73,209,125,0.70)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, rMax, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Кольца дальности
   for(let i=1;i<=4;i++){
+    ctx.save();
+    ctx.shadowColor = 'rgba(73,209,125,0.45)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = i === 4 ? 'rgba(73,209,125,.58)' : 'rgba(73,209,125,.28)';
+    ctx.lineWidth = i === 4 ? 2 : 1;
     ctx.beginPath();
     ctx.arc(cx,cy,rMax*i/4,0,Math.PI*2);
     ctx.stroke();
+    ctx.restore();
   }
 
+  // Радиальные линии
   for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+    ctx.save();
+    ctx.shadowColor = 'rgba(73,209,125,0.35)';
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = 'rgba(73,209,125,.24)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx,cy);
     ctx.lineTo(cx+Math.cos(a)*rMax, cy+Math.sin(a)*rMax);
     ctx.stroke();
+    ctx.restore();
   }
 
+  // Радарный сектор-развёртка
   const sweep = (performance.now()/900) % (Math.PI*2);
-  ctx.strokeStyle = 'rgba(73,209,125,.65)';
-  ctx.lineWidth = 2;
+
+  const sector = ctx.createRadialGradient(cx, cy, 0, cx, cy, rMax);
+  sector.addColorStop(0.00, 'rgba(73,209,125,0.18)');
+  sector.addColorStop(0.65, 'rgba(73,209,125,0.10)');
+  sector.addColorStop(1.00, 'rgba(73,209,125,0.00)');
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, rMax, sweep - 0.42, sweep, false);
+  ctx.closePath();
+  ctx.fillStyle = sector;
+  ctx.fill();
+
+  // Яркий луч радара
+  ctx.save();
+  ctx.shadowColor = 'rgba(73,209,125,1)';
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = 'rgba(145,255,191,.90)';
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(cx,cy);
   ctx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
   ctx.stroke();
+  ctx.restore();
+
+  // Центральная светящаяся точка
+  ctx.save();
+  ctx.shadowColor = 'rgba(73,209,125,1)';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#91ffbf';
+  ctx.fill();
+  ctx.restore();
 
   const obj = state.display_object || state.object || state.source || null;
 

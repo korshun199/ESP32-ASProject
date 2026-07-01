@@ -533,27 +533,92 @@ function drawMain(object){
   mainCtx.fillStyle = '#010509';
   mainCtx.fillRect(0,0,w,h);
 
-  mainCtx.strokeStyle = 'rgba(73,209,125,.25)';
-  mainCtx.lineWidth = 1;
+  // Фосфорное свечение поля радара
+  const glow = mainCtx.createRadialGradient(cx, cy, 8, cx, cy, rMax * 1.12);
+  glow.addColorStop(0.00, 'rgba(73,209,125,0.18)');
+  glow.addColorStop(0.45, 'rgba(73,209,125,0.07)');
+  glow.addColorStop(0.78, 'rgba(73,209,125,0.025)');
+  glow.addColorStop(1.00, 'rgba(73,209,125,0.00)');
+
+  mainCtx.beginPath();
+  mainCtx.arc(cx, cy, rMax * 1.08, 0, Math.PI * 2);
+  mainCtx.fillStyle = glow;
+  mainCtx.fill();
+
+  // Внешний светящийся круг
+  mainCtx.save();
+  mainCtx.shadowColor = 'rgba(73,209,125,0.95)';
+  mainCtx.shadowBlur = 22;
+  mainCtx.strokeStyle = 'rgba(73,209,125,0.70)';
+  mainCtx.lineWidth = 3;
+  mainCtx.beginPath();
+  mainCtx.arc(cx, cy, rMax, 0, Math.PI * 2);
+  mainCtx.stroke();
+  mainCtx.restore();
+
+  // Кольца дальности
   for(let i=1;i<=4;i++){
+    mainCtx.save();
+    mainCtx.shadowColor = 'rgba(73,209,125,0.45)';
+    mainCtx.shadowBlur = 8;
+    mainCtx.strokeStyle = i === 4 ? 'rgba(73,209,125,.58)' : 'rgba(73,209,125,.28)';
+    mainCtx.lineWidth = i === 4 ? 2 : 1;
     mainCtx.beginPath();
     mainCtx.arc(cx,cy,rMax*i/4,0,Math.PI*2);
     mainCtx.stroke();
+    mainCtx.restore();
   }
+
+  // Радиальные линии
   for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+    mainCtx.save();
+    mainCtx.shadowColor = 'rgba(73,209,125,0.35)';
+    mainCtx.shadowBlur = 6;
+    mainCtx.strokeStyle = 'rgba(73,209,125,.24)';
+    mainCtx.lineWidth = 1;
     mainCtx.beginPath();
     mainCtx.moveTo(cx,cy);
     mainCtx.lineTo(cx+Math.cos(a)*rMax, cy+Math.sin(a)*rMax);
     mainCtx.stroke();
+    mainCtx.restore();
   }
 
+  // Радарный сектор-развёртка
   const sweep = (performance.now()/900) % (Math.PI*2);
-  mainCtx.strokeStyle = 'rgba(73,209,125,.65)';
-  mainCtx.lineWidth = 2;
+
+  const sector = mainCtx.createRadialGradient(cx, cy, 0, cx, cy, rMax);
+  sector.addColorStop(0.00, 'rgba(73,209,125,0.18)');
+  sector.addColorStop(0.65, 'rgba(73,209,125,0.10)');
+  sector.addColorStop(1.00, 'rgba(73,209,125,0.00)');
+
+  mainCtx.beginPath();
+  mainCtx.moveTo(cx, cy);
+  mainCtx.arc(cx, cy, rMax, sweep - 0.42, sweep, false);
+  mainCtx.closePath();
+  mainCtx.fillStyle = sector;
+  mainCtx.fill();
+
+  // Яркий луч радара
+  mainCtx.save();
+  mainCtx.shadowColor = 'rgba(73,209,125,1)';
+  mainCtx.shadowBlur = 18;
+  mainCtx.strokeStyle = 'rgba(145,255,191,.90)';
+  mainCtx.lineWidth = 3;
   mainCtx.beginPath();
   mainCtx.moveTo(cx,cy);
   mainCtx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
   mainCtx.stroke();
+  mainCtx.restore();
+
+  // Центральная светящаяся точка
+  mainCtx.save();
+  mainCtx.shadowColor = 'rgba(73,209,125,1)';
+  mainCtx.shadowBlur = 14;
+  mainCtx.beginPath();
+  mainCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+  mainCtx.fillStyle = '#91ffbf';
+  mainCtx.fill();
+  mainCtx.restore();
 
   // Жёлтый объект виден в центральном окне только когда есть сигнал
   // или когда он уже захвачен как цель.
