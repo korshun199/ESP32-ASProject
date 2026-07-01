@@ -3,306 +3,858 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Radar Control</title>
+<title>Radar Control Console</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial,sans-serif;background:#080c12;color:#e8f1ff}
-header{padding:12px 14px;background:#05070b;border-bottom:1px solid #263447}
-h1{margin:0;font-size:22px}
-small{color:#8fa3bd}
-.wrap{display:grid;grid-template-columns:1fr 390px;gap:10px;padding:10px}
-.panel{background:#111923;border:1px solid #263447;border-radius:12px;padding:10px}
-canvas{width:100%;height:70vh;display:block;background:#02050a;border:1px solid #263447;border-radius:10px}
-.controls{display:grid;gap:10px}
-button,input[type=file]{width:100%;padding:10px;border-radius:8px;border:1px solid #263447;background:#1a2635;color:#e8f1ff}
-button{cursor:pointer;font-weight:bold}
-.row{display:grid;grid-template-columns:82px 1fr 58px;gap:8px;align-items:center}
-input[type=range]{width:100%}
-.metricbox{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.metric{padding:9px;background:#081019;border:1px solid #263447;border-radius:8px}
-.metric b{display:block;font-size:20px;margin-top:4px}
-.bar{height:10px;background:#071019;border:1px solid #263447;border-radius:999px;overflow:hidden}
-.fill{height:100%;width:0%;background:#49d17d}
-pre{margin:0;color:#9fb3cc;white-space:pre-wrap;font-size:13px}
-a{color:#49d17d}
-@media(max-width:1000px){.wrap{grid-template-columns:1fr}canvas{height:55vh}}
+
+html,body{
+  margin:0;
+  width:100%;
+  min-height:100%;
+  font-family:Arial,sans-serif;
+  background:#03070b;
+  color:#dff4ff;
+}
+
+body{
+  overflow-x:hidden;
+}
+
+header{
+  height:46px;
+  padding:8px 14px;
+  background:linear-gradient(180deg,#07101a,#03070b);
+  border-bottom:1px solid #1f3447;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+h1{
+  margin:0;
+  font-size:19px;
+  letter-spacing:1px;
+  color:#bfffe0;
+}
+
+.topStatus{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  font-size:13px;
+  color:#8fa3bd;
+}
+
+.lamp{
+  display:inline-block;
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  background:#49d17d;
+  box-shadow:0 0 10px #49d17d;
+}
+
+.console{
+  height:calc(100vh - 46px);
+  min-height:680px;
+  padding:10px;
+  display:grid;
+  grid-template-columns:280px minmax(520px,1fr) 320px;
+  grid-template-rows:minmax(390px,1fr) 245px;
+  gap:10px;
+}
+
+.panel{
+  background:linear-gradient(180deg,#0d1722,#081019);
+  border:1px solid #263b50;
+  border-radius:12px;
+  box-shadow:inset 0 0 20px rgba(0,0,0,.35);
+  padding:10px;
+  min-width:0;
+  min-height:0;
+}
+
+.panelTitle{
+  color:#8fffc0;
+  font-size:13px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  margin-bottom:8px;
+  border-bottom:1px solid #263b50;
+  padding-bottom:5px;
+}
+
+.radarPanel{
+  grid-column:2;
+  grid-row:1;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+}
+
+.radarFrame{
+  flex:1;
+  min-height:0;
+  border:2px solid #25425a;
+  border-radius:14px;
+  background:#010509;
+  padding:8px;
+  box-shadow:
+    inset 0 0 35px rgba(73,209,125,.10),
+    0 0 22px rgba(73,209,125,.08);
+}
+
+canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  background:radial-gradient(circle at center,#05130d,#010509 70%);
+  border-radius:10px;
+}
+
+.leftPanel{
+  grid-column:1;
+  grid-row:1 / span 2;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.rightPanel{
+  grid-column:3;
+  grid-row:1 / span 2;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.bottomPanel{
+  grid-column:2;
+  grid-row:2;
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:10px;
+}
+
+button,input[type=file]{
+  width:100%;
+  padding:11px;
+  border-radius:9px;
+  border:1px solid #31516b;
+  background:linear-gradient(180deg,#1a2b3b,#0d1925);
+  color:#e8f8ff;
+  font-size:15px;
+}
+
+button{
+  cursor:pointer;
+  font-weight:bold;
+}
+
+button:hover{
+  border-color:#49d17d;
+  box-shadow:0 0 8px rgba(73,209,125,.35);
+}
+
+.bigButton{
+  min-height:58px;
+  font-size:17px;
+}
+
+.danger{
+  background:linear-gradient(180deg,#50202a,#1b0b0f);
+  border-color:#803040;
+}
+
+.warn{
+  background:linear-gradient(180deg,#4a3814,#1d1608);
+  border-color:#806420;
+}
+
+.good{
+  background:linear-gradient(180deg,#1b4b32,#092016);
+  border-color:#2d8050;
+}
+
+.row{
+  display:grid;
+  grid-template-columns:84px 1fr 54px;
+  gap:8px;
+  align-items:center;
+  margin-bottom:10px;
+}
+
+.rowWide{
+  display:grid;
+  grid-template-columns:120px 1fr 64px;
+  gap:8px;
+  align-items:center;
+  margin-bottom:10px;
+}
+
+label{
+  color:#b9cde0;
+  font-size:13px;
+}
+
+input[type=range]{
+  width:100%;
+  accent-color:#49d17d;
+}
+
+.value{
+  color:#e8f8ff;
+  font-weight:bold;
+  text-align:right;
+  font-size:14px;
+}
+
+.metricGrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+
+.metric{
+  padding:9px;
+  background:#050c13;
+  border:1px solid #263b50;
+  border-radius:8px;
+}
+
+.metric span{
+  display:block;
+  color:#7f95ad;
+  font-size:12px;
+}
+
+.metric b{
+  display:block;
+  font-size:22px;
+  margin-top:3px;
+  color:#e8f8ff;
+}
+
+.micCard{
+  padding:9px;
+  background:#050c13;
+  border:1px solid #263b50;
+  border-radius:8px;
+  margin-bottom:8px;
+}
+
+.bar{
+  height:10px;
+  background:#02070c;
+  border:1px solid #263b50;
+  border-radius:999px;
+  overflow:hidden;
+  margin-top:5px;
+}
+
+.fill{
+  height:100%;
+  width:0%;
+  background:#49d17d;
+  box-shadow:0 0 8px rgba(73,209,125,.55);
+}
+
+.joystick{
+  position:relative;
+  height:180px;
+  background:#040a10;
+  border:1px solid #263b50;
+  border-radius:12px;
+  overflow:hidden;
+  touch-action:none;
+  cursor:crosshair;
+}
+
+.joyGrid{
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(90deg,transparent 49%,rgba(73,209,125,.18) 50%,transparent 51%),
+    linear-gradient(0deg,transparent 49%,rgba(73,209,125,.18) 50%,transparent 51%);
+}
+
+.joyDot{
+  position:absolute;
+  width:22px;
+  height:22px;
+  margin-left:-11px;
+  margin-top:-11px;
+  border-radius:50%;
+  background:#ffcf5a;
+  box-shadow:0 0 16px rgba(255,207,90,.8);
+  left:50%;
+  top:50%;
+}
+
+pre{
+  margin:0;
+  color:#8fa3bd;
+  font-size:12px;
+  line-height:1.35;
+  white-space:pre-wrap;
+}
+
+a{
+  color:#49d17d;
+  font-weight:bold;
+}
+
+@media(max-width:1150px){
+  .console{
+    height:auto;
+    min-height:0;
+    grid-template-columns:1fr;
+    grid-template-rows:auto;
+  }
+
+  .leftPanel,.rightPanel,.radarPanel,.bottomPanel{
+    grid-column:auto;
+    grid-row:auto;
+  }
+
+  .radarPanel{
+    min-height:440px;
+  }
+
+  .bottomPanel{
+    grid-template-columns:1fr;
+  }
+}
 </style>
 </head>
 <body>
 <header>
-  <h1>Пульт акустического радара</h1>
-  <small>T16: звук, положение источника, усиление виртуальных микрофонов</small>
+  <h1>ACOUSTIC RADAR CONTROL</h1>
+  <div class="topStatus">
+    <span><span class="lamp"></span> SERVER</span>
+    <span id="sendStatus">ожидание</span>
+  </div>
 </header>
 
-<div class="wrap">
-  <section class="panel">
-    <canvas id="map" width="1000" height="700"></canvas>
+<div class="console">
+  <aside class="leftPanel">
+    <section class="panel">
+      <div class="panelTitle">Звук</div>
+      <input id="file" type="file" accept="audio/*">
+      <div style="height:8px"></div>
+      <button id="playBtn" class="bigButton good">▶ Старт / пауза</button>
+      <div style="height:8px"></div>
+      <button id="autoBtn" class="bigButton warn">Авто-движение: выкл</button>
+      <div style="height:8px"></div>
+      <button id="stopBtn" class="bigButton danger">■ Стоп / сброс</button>
+    </section>
+
+    <section class="panel">
+      <div class="panelTitle">Ручное наведение</div>
+
+      <div class="joystick" id="joystick">
+        <div class="joyGrid"></div>
+        <div class="joyDot" id="joyDot"></div>
+      </div>
+
+      <div style="height:10px"></div>
+
+      <div class="row">
+        <label>Source X</label>
+        <input id="srcX" type="range" min="0" max="1000" value="500">
+        <span class="value" id="srcXv">0.50</span>
+      </div>
+
+      <div class="row">
+        <label>Source Y</label>
+        <input id="srcY" type="range" min="0" max="1000" value="500">
+        <span class="value" id="srcYv">0.50</span>
+      </div>
+
+      <div class="row">
+        <label>Speed</label>
+        <input id="speed" type="range" min="1" max="100" value="25">
+        <span class="value" id="speedv">25</span>
+      </div>
+    </section>
+  </aside>
+
+  <section class="radarPanel panel">
+    <div class="panelTitle">Радар оператора</div>
+    <div class="radarFrame">
+      <canvas id="radar"></canvas>
+    </div>
   </section>
 
-  <aside class="panel controls">
-    <input id="file" type="file" accept="audio/*">
-    <button id="playBtn">▶ Старт / пауза звука</button>
-    <button id="autoBtn">Авто-движение: выкл</button>
+  <aside class="rightPanel">
+    <section class="panel">
+      <div class="panelTitle">Цель / расчёт</div>
+      <div class="metricGrid">
+        <div class="metric"><span>X</span><b id="xOut">0.50</b></div>
+        <div class="metric"><span>Y</span><b id="yOut">0.50</b></div>
+        <div class="metric"><span>Частота</span><b id="freqOut">0 Hz</b></div>
+        <div class="metric"><span>Громкость</span><b id="volOut">0%</b></div>
+      </div>
+    </section>
 
-    <div class="metricbox">
-      <div class="metric">X <b id="xOut">0.50</b></div>
-      <div class="metric">Y <b id="yOut">0.50</b></div>
-      <div class="metric">Частота <b id="freqOut">0 Hz</b></div>
-      <div class="metric">Громкость <b id="volOut">0%</b></div>
-    </div>
+    <section class="panel">
+      <div class="panelTitle">Микрофоны / усиление</div>
+      <div id="micControls"></div>
+    </section>
 
-    <div class="row">
-      <label>Src X</label>
-      <input id="srcX" type="range" min="0" max="1000" value="500">
-      <span id="srcXv">0.50</span>
-    </div>
-
-    <div class="row">
-      <label>Src Y</label>
-      <input id="srcY" type="range" min="0" max="1000" value="500">
-      <span id="srcYv">0.50</span>
-    </div>
-
-    <div class="row">
-      <label>Speed</label>
-      <input id="speed" type="range" min="1" max="100" value="25">
-      <span id="speedv">25</span>
-    </div>
-
-    <hr style="width:100%;border:0;border-top:1px solid #263447">
-
-    <div id="micControls"></div>
-
-    <hr style="width:100%;border:0;border-top:1px solid #263447">
-
-    <div class="metric">
-      Монитор планшета:
-      <br>
-      <a href="/monitor.html" target="_blank">/monitor.html</a>
-    </div>
-
-    <pre id="debug">Загрузи аудиофайл мотоцикла и нажми старт.</pre>
+    <section class="panel">
+      <div class="panelTitle">Планшет</div>
+      <div style="font-size:13px;color:#8fa3bd;line-height:1.45">
+        Монитор:
+        <br>
+        <a href="/monitor.html?v=5" target="_blank">/monitor.html</a>
+        <br><br>
+        На планшете только карта и точка X/Y.
+      </div>
+    </section>
   </aside>
+
+  <section class="bottomPanel">
+    <div class="panel">
+      <div class="panelTitle">Режимы</div>
+      <button id="centerBtn">Центр</button>
+      <div style="height:8px"></div>
+      <button id="leftPassBtn">Проход слева → вправо</button>
+      <div style="height:8px"></div>
+      <button id="circleBtn">Круговой проход</button>
+    </div>
+
+    <div class="panel">
+      <div class="panelTitle">Общий уровень</div>
+
+      <div class="rowWide">
+        <label>Master gain</label>
+        <input id="masterGain" type="range" min="0" max="300" value="100">
+        <span class="value" id="masterGainV">1.00</span>
+      </div>
+
+      <div class="rowWide">
+        <label>Sensitivity</label>
+        <input id="sensitivity" type="range" min="10" max="800" value="350">
+        <span class="value" id="sensitivityV">3.50</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panelTitle">Диагностика</div>
+      <pre id="debug">Загрузи аудиофайл мотоцикла.</pre>
+    </div>
+  </section>
 </div>
 
 <script>
-const canvas=document.getElementById('map');
-const ctx=canvas.getContext('2d');
+const radar = document.getElementById('radar');
+const ctx = radar.getContext('2d');
 
-const fileInput=document.getElementById('file');
-const playBtn=document.getElementById('playBtn');
-const autoBtn=document.getElementById('autoBtn');
+const fileInput = document.getElementById('file');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const autoBtn = document.getElementById('autoBtn');
 
-const srcX=document.getElementById('srcX');
-const srcY=document.getElementById('srcY');
-const speed=document.getElementById('speed');
+const centerBtn = document.getElementById('centerBtn');
+const leftPassBtn = document.getElementById('leftPassBtn');
+const circleBtn = document.getElementById('circleBtn');
 
-const srcXv=document.getElementById('srcXv');
-const srcYv=document.getElementById('srcYv');
-const speedv=document.getElementById('speedv');
+const srcX = document.getElementById('srcX');
+const srcY = document.getElementById('srcY');
+const speed = document.getElementById('speed');
+const masterGain = document.getElementById('masterGain');
+const sensitivity = document.getElementById('sensitivity');
 
-const xOut=document.getElementById('xOut');
-const yOut=document.getElementById('yOut');
-const freqOut=document.getElementById('freqOut');
-const volOut=document.getElementById('volOut');
-const debug=document.getElementById('debug');
-const micControls=document.getElementById('micControls');
+const srcXv = document.getElementById('srcXv');
+const srcYv = document.getElementById('srcYv');
+const speedv = document.getElementById('speedv');
+const masterGainV = document.getElementById('masterGainV');
+const sensitivityV = document.getElementById('sensitivityV');
 
-let audioCtx=null, analyser=null, sourceNode=null, audioBuffer=null;
-let playing=false, pausedAt=0, startedAt=0;
-let autoMove=false;
-let t0=performance.now();
+const xOut = document.getElementById('xOut');
+const yOut = document.getElementById('yOut');
+const freqOut = document.getElementById('freqOut');
+const volOut = document.getElementById('volOut');
+const debug = document.getElementById('debug');
+const micControls = document.getElementById('micControls');
+const sendStatus = document.getElementById('sendStatus');
 
-const mics=[
+const joystick = document.getElementById('joystick');
+const joyDot = document.getElementById('joyDot');
+
+let audioCtx = null;
+let analyser = null;
+let sourceNode = null;
+let audioBuffer = null;
+
+let playing = false;
+let pausedAt = 0;
+let startedAt = 0;
+
+let autoMove = false;
+let motionMode = 'manual';
+let t0 = performance.now();
+
+const mics = [
   {id:1,name:'MIC1 LT',x:0.12,y:0.12,gain:1,level:0},
   {id:2,name:'MIC2 RT',x:0.88,y:0.12,gain:1,level:0},
   {id:3,name:'MIC3 LB',x:0.12,y:0.88,gain:1,level:0},
   {id:4,name:'MIC4 RB',x:0.88,y:0.88,gain:1,level:0}
 ];
 
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function clamp(v,a,b){
+  return Math.max(a,Math.min(b,v));
+}
+
+function resizeRadar(){
+  const rect = radar.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  radar.width = Math.max(600, Math.floor(rect.width * dpr));
+  radar.height = Math.max(360, Math.floor(rect.height * dpr));
+}
+
+window.addEventListener('resize', resizeRadar);
+resizeRadar();
+
+function setSource(x,y){
+  x = clamp(x,0,1);
+  y = clamp(y,0,1);
+
+  srcX.value = Math.round(x * 1000);
+  srcY.value = Math.round(y * 1000);
+
+  updateJoyDot(x,y);
+}
+
+function updateJoyDot(x,y){
+  joyDot.style.left = (x * 100) + '%';
+  joyDot.style.top = (y * 100) + '%';
+}
+
+function joystickSetFromEvent(e){
+  const rect = joystick.getBoundingClientRect();
+  const pointer = e.touches ? e.touches[0] : e;
+
+  const x = clamp((pointer.clientX - rect.left) / rect.width, 0, 1);
+  const y = clamp((pointer.clientY - rect.top) / rect.height, 0, 1);
+
+  autoMove = false;
+  motionMode = 'manual';
+  autoBtn.textContent = 'Авто-движение: выкл';
+
+  setSource(x,y);
+}
+
+joystick.addEventListener('mousedown', e => {
+  joystickSetFromEvent(e);
+  const move = ev => joystickSetFromEvent(ev);
+  const up = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+});
+
+joystick.addEventListener('touchstart', e => {
+  e.preventDefault();
+  joystickSetFromEvent(e);
+}, {passive:false});
+
+joystick.addEventListener('touchmove', e => {
+  e.preventDefault();
+  joystickSetFromEvent(e);
+}, {passive:false});
 
 function makeMicControls(){
   micControls.innerHTML='';
+
   for(const mic of mics){
-    const div=document.createElement('div');
-    div.style.marginBottom='10px';
-    div.innerHTML=`
+    const div = document.createElement('div');
+    div.className = 'micCard';
+    div.innerHTML = `
       <div class="row">
         <label>${mic.name}</label>
         <input id="gain${mic.id}" type="range" min="0" max="300" value="100">
-        <span id="gain${mic.id}v">1.00</span>
+        <span class="value" id="gain${mic.id}v">1.00</span>
       </div>
       <div class="bar"><div class="fill" id="level${mic.id}"></div></div>
+      <div style="margin-top:5px;color:#8fa3bd;font-size:12px">
+        level: <span id="level${mic.id}txt">0%</span>
+      </div>
     `;
+
     micControls.appendChild(div);
-    const slider=div.querySelector('#gain'+mic.id);
-    const value=div.querySelector('#gain'+mic.id+'v');
+
+    const slider = div.querySelector('#gain'+mic.id);
+    const value = div.querySelector('#gain'+mic.id+'v');
+
     slider.addEventListener('input',()=>{
-      mic.gain=Number(slider.value)/100;
-      value.textContent=mic.gain.toFixed(2);
+      mic.gain = Number(slider.value) / 100;
+      value.textContent = mic.gain.toFixed(2);
     });
   }
 }
 
 function getSource(now){
   if(!autoMove){
-    return {x:Number(srcX.value)/1000,y:Number(srcY.value)/1000};
+    return {
+      x:Number(srcX.value)/1000,
+      y:Number(srcY.value)/1000
+    };
   }
-  const sp=Number(speed.value)/100;
-  const t=(now-t0)/1000*sp;
-  const x=0.5+0.38*Math.cos(t*1.7);
-  const y=0.5+0.30*Math.sin(t*1.1);
-  srcX.value=Math.round(x*1000);
-  srcY.value=Math.round(y*1000);
+
+  const sp = Number(speed.value) / 100;
+  const t = (now - t0) / 1000 * sp;
+
+  let x = 0.5;
+  let y = 0.5;
+
+  if(motionMode === 'leftpass'){
+    x = ((t * 0.25) % 1.2) - 0.1;
+    y = 0.5 + 0.18 * Math.sin(t * 2.0);
+  }else if(motionMode === 'circle'){
+    x = 0.5 + 0.36 * Math.cos(t * 1.4);
+    y = 0.5 + 0.30 * Math.sin(t * 1.4);
+  }else{
+    x = 0.5 + 0.38 * Math.cos(t * 1.7);
+    y = 0.5 + 0.30 * Math.sin(t * 1.1);
+  }
+
+  x = clamp(x,0,1);
+  y = clamp(y,0,1);
+
+  srcX.value = Math.round(x * 1000);
+  srcY.value = Math.round(y * 1000);
+  updateJoyDot(x,y);
+
   return {x,y};
 }
 
 function audioMetrics(){
-  if(!analyser || !audioCtx) return {rms:0,peakHz:0};
+  if(!analyser || !audioCtx){
+    return {rms:0,peakHz:0};
+  }
 
-  const n=analyser.fftSize;
-  const td=new Uint8Array(n);
+  const n = analyser.fftSize;
+  const td = new Uint8Array(n);
   analyser.getByteTimeDomainData(td);
 
-  let sum=0;
+  let sum = 0;
   for(let i=0;i<n;i++){
-    const v=(td[i]-128)/128;
-    sum+=v*v;
+    const v = (td[i] - 128) / 128;
+    sum += v*v;
   }
-  const rms=Math.sqrt(sum/n);
 
-  const fd=new Uint8Array(analyser.frequencyBinCount);
+  const rms = Math.sqrt(sum/n);
+
+  const fd = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(fd);
 
-  let max=0,idx=0;
+  let max = 0;
+  let idx = 0;
+
   for(let i=2;i<fd.length;i++){
-    if(fd[i]>max){max=fd[i];idx=i;}
+    if(fd[i] > max){
+      max = fd[i];
+      idx = i;
+    }
   }
 
-  return {rms,peakHz:Math.round(idx*audioCtx.sampleRate/analyser.fftSize)};
+  return {
+    rms,
+    peakHz: Math.round(idx * audioCtx.sampleRate / analyser.fftSize)
+  };
 }
 
 function computeMics(src,rms){
-  let total=0,wx=0,wy=0;
-  const base=clamp(rms*3.5,0,1);
+  let total = 0;
+  let wx = 0;
+  let wy = 0;
+
+  const sens = Number(sensitivity.value) / 100;
+  const master = Number(masterGain.value) / 100;
+  const base = clamp(rms * sens * master,0,1);
 
   for(const mic of mics){
-    const dx=src.x-mic.x;
-    const dy=src.y-mic.y;
-    const d=Math.sqrt(dx*dx+dy*dy);
+    const dx = src.x - mic.x;
+    const dy = src.y - mic.y;
+    const d = Math.sqrt(dx*dx + dy*dy);
 
-    const distanceGain=1/(0.10+d*d*3.6);
+    const distanceGain = 1 / (0.10 + d*d*3.6);
 
-    const aimX=0.5-mic.x;
-    const aimY=0.5-mic.y;
-    const la=Math.sqrt(aimX*aimX+aimY*aimY)||1;
-    const lb=Math.sqrt(dx*dx+dy*dy)||1;
-    const dot=(aimX*dx+aimY*dy)/(la*lb);
+    const aimX = 0.5 - mic.x;
+    const aimY = 0.5 - mic.y;
+    const la = Math.sqrt(aimX*aimX + aimY*aimY) || 1;
+    const lb = Math.sqrt(dx*dx + dy*dy) || 1;
 
-    const directional=clamp((dot+1)/2,0.15,1.0);
+    const dot = (aimX*dx + aimY*dy) / (la*lb);
+    const directional = clamp((dot + 1) / 2,0.15,1.0);
 
-    mic.level=clamp(base*distanceGain*directional*mic.gain,0,1);
+    mic.level = clamp(base * distanceGain * directional * mic.gain,0,1);
 
-    const w=mic.level+0.0001;
-    total+=w;
-    wx+=mic.x*w;
-    wy+=mic.y*w;
+    const w = mic.level + 0.0001;
+    total += w;
+    wx += mic.x * w;
+    wy += mic.y * w;
   }
 
-  return {x:total?wx/total:0.5,y:total?wy/total:0.5};
+  return {
+    x: total ? wx/total : 0.5,
+    y: total ? wy/total : 0.5
+  };
 }
 
-function draw(state){
-  const w=canvas.width,h=canvas.height;
+function drawRadar(state){
+  resizeRadar();
+
+  const w = radar.width;
+  const h = radar.height;
+  const cx = w/2;
+  const cy = h/2;
+  const rMax = Math.min(w,h) * 0.44;
+
   ctx.clearRect(0,0,w,h);
-  ctx.fillStyle='#02050a';
+
+  ctx.fillStyle = '#010509';
   ctx.fillRect(0,0,w,h);
 
-  ctx.strokeStyle='#1b2a3b';
-  ctx.lineWidth=1;
-  for(let i=0;i<=10;i++){
-    const x=i*w/10,y=i*h/10;
-    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+  // glow
+  const grad = ctx.createRadialGradient(cx,cy,10,cx,cy,rMax*1.25);
+  grad.addColorStop(0,'rgba(73,209,125,0.10)');
+  grad.addColorStop(0.65,'rgba(73,209,125,0.035)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,w,h);
+
+  // radar circles
+  ctx.strokeStyle = 'rgba(73,209,125,0.28)';
+  ctx.lineWidth = 1;
+
+  for(let i=1;i<=4;i++){
+    ctx.beginPath();
+    ctx.arc(cx,cy,rMax*i/4,0,Math.PI*2);
+    ctx.stroke();
   }
 
-  for(const mic of state.mics){
-    const mx=mic.x*w,my=mic.y*h;
-    ctx.beginPath();
-    ctx.arc(mx,my,18+mic.level*44,0,Math.PI*2);
-    ctx.fillStyle=`rgba(73,209,125,${0.12+mic.level*0.6})`;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(mx,my,11,0,Math.PI*2);
-    ctx.fillStyle='#49d17d';
-    ctx.fill();
-
-    ctx.fillStyle='#e8f1ff';
-    ctx.font='18px Arial';
-    ctx.fillText(mic.name,mx+20,my-8);
-
-    ctx.fillStyle='#9fb3cc';
-    ctx.font='14px Arial';
-    ctx.fillText(`gain ${mic.gain.toFixed(2)} level ${Math.round(mic.level*100)}%`,mx+20,my+12);
-  }
-
-  const sx=state.source.x*w,sy=state.source.y*h;
+  // cross
   ctx.beginPath();
-  ctx.arc(sx,sy,14,0,Math.PI*2);
-  ctx.fillStyle='#ffcf5a';
+  ctx.moveTo(cx-rMax,cy);
+  ctx.lineTo(cx+rMax,cy);
+  ctx.moveTo(cx,cy-rMax);
+  ctx.lineTo(cx,cy+rMax);
+  ctx.stroke();
+
+  // diagonal lines
+  for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(a)*rMax,cy+Math.sin(a)*rMax);
+    ctx.stroke();
+  }
+
+  // sweep
+  const sweepA = (performance.now()/900) % (Math.PI*2);
+  ctx.strokeStyle = 'rgba(73,209,125,0.65)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.cos(sweepA)*rMax,cy+Math.sin(sweepA)*rMax);
+  ctx.stroke();
+
+  // mics
+  for(const mic of state.mics){
+    const mx = cx + (mic.x - 0.5) * rMax * 2;
+    const my = cy + (mic.y - 0.5) * rMax * 2;
+
+    ctx.beginPath();
+    ctx.arc(mx,my,6,0,Math.PI*2);
+    ctx.fillStyle = '#49d17d';
+    ctx.fill();
+
+    ctx.fillStyle = '#78a890';
+    ctx.font = '12px Arial';
+    ctx.fillText('M'+mic.id,mx+8,my-6);
+  }
+
+  // virtual source
+  const sx = cx + (state.source.x - 0.5) * rMax * 2;
+  const sy = cy + (state.source.y - 0.5) * rMax * 2;
+
+  ctx.beginPath();
+  ctx.arc(sx,sy,8,0,Math.PI*2);
+  ctx.fillStyle = '#ffcf5a';
   ctx.fill();
 
-  ctx.fillStyle='#ffcf5a';
-  ctx.font='bold 18px Arial';
-  ctx.fillText('SOURCE',sx+18,sy-12);
+  // estimated point
+  const ex = cx + (state.estimate.x - 0.5) * rMax * 2;
+  const ey = cy + (state.estimate.y - 0.5) * rMax * 2;
 
-  const ex=state.estimate.x*w,ey=state.estimate.y*h;
-  ctx.strokeStyle='#ff5f6d';
-  ctx.lineWidth=4;
+  ctx.strokeStyle = '#ff5f6d';
+  ctx.lineWidth = 3;
+
   ctx.beginPath();
-  ctx.arc(ex,ey,18,0,Math.PI*2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(ex-24,ey);ctx.lineTo(ex+24,ey);
-  ctx.moveTo(ex,ey-24);ctx.lineTo(ex,ey+24);
+  ctx.arc(ex,ey,16,0,Math.PI*2);
   ctx.stroke();
 
-  ctx.fillStyle='#ff5f6d';
-  ctx.font='bold 18px Arial';
-  ctx.fillText('EST X/Y',ex+25,ey+6);
+  ctx.beginPath();
+  ctx.moveTo(ex-24,ey);
+  ctx.lineTo(ex+24,ey);
+  ctx.moveTo(ex,ey-24);
+  ctx.lineTo(ex,ey+24);
+  ctx.stroke();
 
-  ctx.fillStyle='#e8f1ff';
-  ctx.font='20px Arial';
-  ctx.fillText(`Estimated X=${state.estimate.x.toFixed(3)} Y=${state.estimate.y.toFixed(3)}`,24,34);
-  ctx.fillText(`Volume=${Math.round(state.audio.volume*100)}% Peak=${state.audio.freq} Hz`,24,62);
+  ctx.fillStyle = '#ff5f6d';
+  ctx.font = 'bold 17px Arial';
+  ctx.fillText('TARGET',ex+24,ey+6);
+
+  // info
+  ctx.fillStyle = '#dff4ff';
+  ctx.font = '18px Arial';
+  ctx.fillText(`X=${state.estimate.x.toFixed(3)}  Y=${state.estimate.y.toFixed(3)}`,18,30);
+
+  ctx.fillStyle = '#8fa3bd';
+  ctx.font = '14px Arial';
+  ctx.fillText(`VOL=${Math.round(state.audio.volume*100)}%  FREQ=${state.audio.freq}Hz`,18,52);
 }
 
 function updateUI(state){
-  srcXv.textContent=state.source.x.toFixed(2);
-  srcYv.textContent=state.source.y.toFixed(2);
-  speedv.textContent=speed.value;
+  srcXv.textContent = state.source.x.toFixed(2);
+  srcYv.textContent = state.source.y.toFixed(2);
+  speedv.textContent = String(state.source.speed);
 
-  xOut.textContent=state.estimate.x.toFixed(2);
-  yOut.textContent=state.estimate.y.toFixed(2);
-  freqOut.textContent=state.audio.freq+' Hz';
-  volOut.textContent=Math.round(state.audio.volume*100)+'%';
+  masterGainV.textContent = (Number(masterGain.value)/100).toFixed(2);
+  sensitivityV.textContent = (Number(sensitivity.value)/100).toFixed(2);
+
+  xOut.textContent = state.estimate.x.toFixed(2);
+  yOut.textContent = state.estimate.y.toFixed(2);
+  freqOut.textContent = state.audio.freq + ' Hz';
+  volOut.textContent = Math.round(state.audio.volume*100) + '%';
 
   for(const mic of mics){
-    const el=document.getElementById('level'+mic.id);
-    if(el) el.style.width=Math.round(mic.level*100)+'%';
+    const pct = Math.round(mic.level*100);
+
+    const bar = document.getElementById('level'+mic.id);
+    const txt = document.getElementById('level'+mic.id+'txt');
+
+    if(bar) bar.style.width = pct + '%';
+    if(txt) txt.textContent = pct + '%';
   }
 
-  debug.textContent=
-`control_page=T16
+  debug.textContent =
+`mode=${motionMode}
+auto=${autoMove}
+
 source_x=${state.source.x.toFixed(3)}
 source_y=${state.source.y.toFixed(3)}
 estimated_x=${state.estimate.x.toFixed(3)}
 estimated_y=${state.estimate.y.toFixed(3)}
-peak_hz=${state.audio.freq}
+freq=${state.audio.freq} Hz
 volume=${state.audio.volume.toFixed(4)}
-mic_levels=${mics.map(m=>m.name+':'+m.level.toFixed(3)).join(' ')}`;
+
+mics:
+${mics.map(m=>m.name+' gain='+m.gain.toFixed(2)+' level='+m.level.toFixed(3)).join('\n')}`;
 }
 
 async function sendState(state){
@@ -312,17 +864,25 @@ async function sendState(state){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(state)
     });
+
+    sendStatus.textContent = 'передача данных';
+    sendStatus.style.color = '#49d17d';
   }catch(e){
-    debug.textContent='Ошибка отправки состояния на сервер: '+e;
+    sendStatus.textContent = 'ошибка связи';
+    sendStatus.style.color = '#ff5f6d';
   }
 }
 
 async function loadAudio(file){
-  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  const data=await file.arrayBuffer();
-  audioBuffer=await audioCtx.decodeAudioData(data);
-  pausedAt=0;
-  debug.textContent=`Файл загружен: ${file.name}
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  const data = await file.arrayBuffer();
+  audioBuffer = await audioCtx.decodeAudioData(data);
+  pausedAt = 0;
+
+  debug.textContent = `Файл загружен: ${file.name}
 duration=${audioBuffer.duration.toFixed(2)} sec
 sampleRate=${audioBuffer.sampleRate}`;
 }
@@ -332,59 +892,133 @@ function playPause(){
     alert('Сначала загрузи звуковой файл.');
     return;
   }
+
   if(playing){
     try{sourceNode.stop();}catch(e){}
-    pausedAt=audioCtx.currentTime-startedAt;
-    playing=false;
+    pausedAt = audioCtx.currentTime - startedAt;
+    playing = false;
+    playBtn.textContent = '▶ Старт / пауза';
     return;
   }
 
-  sourceNode=audioCtx.createBufferSource();
-  sourceNode.buffer=audioBuffer;
-  sourceNode.loop=true;
+  sourceNode = audioCtx.createBufferSource();
+  sourceNode.buffer = audioBuffer;
+  sourceNode.loop = true;
 
-  analyser=audioCtx.createAnalyser();
-  analyser.fftSize=2048;
-  analyser.smoothingTimeConstant=0.72;
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.72;
 
   sourceNode.connect(analyser);
   analyser.connect(audioCtx.destination);
 
-  startedAt=audioCtx.currentTime-pausedAt;
-  sourceNode.start(0,pausedAt%audioBuffer.duration);
-  playing=true;
+  startedAt = audioCtx.currentTime - pausedAt;
+  sourceNode.start(0, pausedAt % audioBuffer.duration);
+
+  playing = true;
+  playBtn.textContent = '⏸ Пауза';
+}
+
+function stopAll(){
+  if(sourceNode){
+    try{sourceNode.stop();}catch(e){}
+  }
+
+  playing = false;
+  pausedAt = 0;
+  playBtn.textContent = '▶ Старт / пауза';
+
+  autoMove = false;
+  motionMode = 'manual';
+  autoBtn.textContent = 'Авто-движение: выкл';
+
+  setSource(0.5,0.5);
 }
 
 fileInput.addEventListener('change',async()=>{
-  const f=fileInput.files[0];
+  const f = fileInput.files[0];
   if(f) await loadAudio(f);
 });
 
 playBtn.addEventListener('click',async()=>{
-  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state==='suspended') await audioCtx.resume();
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  if(audioCtx.state === 'suspended'){
+    await audioCtx.resume();
+  }
+
   playPause();
 });
 
+stopBtn.addEventListener('click',stopAll);
+
 autoBtn.addEventListener('click',()=>{
-  autoMove=!autoMove;
-  autoBtn.textContent=autoMove?'Авто-движение: вкл':'Авто-движение: выкл';
+  autoMove = !autoMove;
+  motionMode = autoMove ? 'auto' : 'manual';
+  autoBtn.textContent = autoMove ? 'Авто-движение: вкл' : 'Авто-движение: выкл';
+  t0 = performance.now();
+});
+
+centerBtn.addEventListener('click',()=>{
+  autoMove = false;
+  motionMode = 'manual';
+  autoBtn.textContent = 'Авто-движение: выкл';
+  setSource(0.5,0.5);
+});
+
+leftPassBtn.addEventListener('click',()=>{
+  autoMove = true;
+  motionMode = 'leftpass';
+  autoBtn.textContent = 'Авто-движение: вкл';
+  t0 = performance.now();
+});
+
+circleBtn.addEventListener('click',()=>{
+  autoMove = true;
+  motionMode = 'circle';
+  autoBtn.textContent = 'Авто-движение: вкл';
+  t0 = performance.now();
+});
+
+srcX.addEventListener('input',()=>{
+  autoMove = false;
+  motionMode = 'manual';
+  autoBtn.textContent = 'Авто-движение: выкл';
+  updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
+});
+
+srcY.addEventListener('input',()=>{
+  autoMove = false;
+  motionMode = 'manual';
+  autoBtn.textContent = 'Авто-движение: выкл';
+  updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
 });
 
 function frame(now){
-  const source=getSource(now);
-  const audioRaw=audioMetrics();
-  const estimate=computeMics(source,audioRaw.rms);
+  const source = getSource(now);
+  const audioRaw = audioMetrics();
+  const estimate = computeMics(source,audioRaw.rms);
 
-  const state={
-    source:{x:source.x,y:source.y,auto:autoMove,speed:Number(speed.value)},
-    audio:{volume:audioRaw.rms,freq:audioRaw.peakHz},
+  const state = {
+    source:{
+      x:source.x,
+      y:source.y,
+      auto:autoMove,
+      speed:Number(speed.value),
+      mode:motionMode
+    },
+    audio:{
+      volume:audioRaw.rms,
+      freq:audioRaw.peakHz
+    },
     mics:mics,
     estimate:estimate,
     updated_ms:Date.now()
   };
 
-  draw(state);
+  drawRadar(state);
   updateUI(state);
   sendState(state);
 
@@ -392,6 +1026,7 @@ function frame(now){
 }
 
 makeMicControls();
+setSource(0.5,0.5);
 requestAnimationFrame(frame);
 </script>
 </body>
