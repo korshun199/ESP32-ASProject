@@ -15,43 +15,26 @@ html,body{
   background:#02050a;
   color:#e8f1ff;
 }
-body{
-  display:flex;
-  flex-direction:column;
-}
 header{
-  height:34px;
-  min-height:34px;
+  height:32px;
   padding:5px 10px;
   background:#05070b;
   border-bottom:1px solid #263447;
   display:flex;
-  align-items:center;
   justify-content:space-between;
+  align-items:center;
 }
-h1{
-  margin:0;
-  font-size:15px;
-  line-height:1;
-}
-#status{
-  font-size:11px;
-  color:#8fa3bd;
-}
-main{
-  flex:1;
-  min-height:0;
-  padding:5px;
-}
+h1{margin:0;font-size:14px}
+#status{font-size:11px;color:#8fa3bd}
+main{height:calc(100vh - 32px);padding:5px}
 canvas{
   width:100%;
   height:100%;
   display:block;
-  background:#02050a;
+  background:#010509;
   border:1px solid #263447;
   border-radius:8px;
 }
-
 @media (orientation: portrait){
   body::before{
     content:"Поверни планшет горизонтально";
@@ -62,7 +45,6 @@ canvas{
     justify-content:center;
     align-items:center;
     text-align:center;
-    padding:24px;
     background:#03060a;
     color:#ffcf5a;
     font-size:24px;
@@ -73,9 +55,9 @@ canvas{
 </head>
 <body>
 <header>
-
+  <h1>Монитор радара</h1>
+  <div id="status">ожидание...</div>
 </header>
-
 <main>
   <canvas id="map"></canvas>
 </main>
@@ -84,17 +66,14 @@ canvas{
 const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
-
 let lastState = null;
 
 function resizeCanvas(){
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-
-  canvas.width = Math.max(640, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(360, Math.floor(rect.height * dpr));
+  canvas.width = Math.max(640, Math.floor(rect.width*dpr));
+  canvas.height = Math.max(360, Math.floor(rect.height*dpr));
 }
-
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
@@ -103,116 +82,89 @@ function draw(state){
 
   const w = canvas.width;
   const h = canvas.height;
+  const cx = w/2;
+  const cy = h/2;
+  const rMax = Math.min(w,h)*0.43;
 
-  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#010509';
+  ctx.fillRect(0,0,w,h);
 
-  ctx.fillStyle = '#02050a';
-  ctx.fillRect(0, 0, w, h);
-
-  // grid
-  ctx.strokeStyle = '#172538';
+  ctx.strokeStyle = 'rgba(73,209,125,.25)';
   ctx.lineWidth = 1;
 
-  for(let i = 0; i <= 10; i++){
-    const x = i * w / 10;
-    const y = i * h / 10;
-
+  for(let i=1;i<=4;i++){
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
+    ctx.arc(cx,cy,rMax*i/4,0,Math.PI*2);
     ctx.stroke();
   }
 
-  // border
-  ctx.strokeStyle = '#33475f';
+  for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(a)*rMax, cy+Math.sin(a)*rMax);
+    ctx.stroke();
+  }
+
+  const sweep = (performance.now()/900) % (Math.PI*2);
+  ctx.strokeStyle = 'rgba(73,209,125,.65)';
   ctx.lineWidth = 2;
-  ctx.strokeRect(2, 2, w - 4, h - 4);
+  ctx.beginPath();
+  ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
+  ctx.stroke();
 
-  // microphones as small fixed points
-  if(state.mics){
-    for(const mic of state.mics){
-      const mx = mic.x * w;
-      const my = mic.y * h;
+  if(state.target && state.target.locked){
+    ctx.strokeStyle = '#ff5f6d';
+    ctx.lineWidth = 5;
 
-      ctx.beginPath();
-      ctx.arc(mx, my, 7, 0, Math.PI * 2);
-      ctx.fillStyle = '#49d17d';
-      ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx,cy,26,0,Math.PI*2);
+    ctx.stroke();
 
-      ctx.fillStyle = '#7f95ad';
-      ctx.font = Math.max(10, Math.floor(h * 0.026)) + 'px Arial';
-      ctx.fillText(mic.name.replace('MIC', 'M'), mx + 10, my - 7);
-    }
+    ctx.beginPath();
+    ctx.moveTo(cx-48,cy);
+    ctx.lineTo(cx+48,cy);
+    ctx.moveTo(cx,cy-48);
+    ctx.lineTo(cx,cy+48);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ff5f6d';
+    ctx.font = 'bold 30px Arial';
+    ctx.fillText('ЦЕЛЬ', cx+56, cy+10);
+  }else{
+    const obj = state.object || state.source || {x:0.5,y:0.5};
+    const ox = cx + (obj.x-0.5)*rMax*2;
+    const oy = cy + (obj.y-0.5)*rMax*2;
+
+    ctx.beginPath();
+    ctx.arc(ox,oy,14,0,Math.PI*2);
+    ctx.fillStyle = '#ffcf5a';
+    ctx.fill();
+
+    ctx.fillStyle = '#ffcf5a';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('ОБЪЕКТ', ox+18, oy-10);
   }
-
-  // object from microphone volume sliders, main red cross
-  const ex = state.estimate.x * w;
-  const ey = state.estimate.y * h;
-
-  const cross = Math.max(22, Math.floor(Math.min(w, h) * 0.045));
-  const circle = Math.max(14, Math.floor(Math.min(w, h) * 0.030));
-
-  ctx.strokeStyle = '#ff5f6d';
-  ctx.lineWidth = Math.max(3, Math.floor(Math.min(w, h) * 0.006));
-
-  ctx.beginPath();
-  ctx.arc(ex, ey, circle, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(ex - cross, ey);
-  ctx.lineTo(ex + cross, ey);
-  ctx.moveTo(ex, ey - cross);
-  ctx.lineTo(ex, ey + cross);
-  ctx.stroke();
-
-  ctx.fillStyle = '#ff5f6d';
-  ctx.font = 'bold ' + Math.max(15, Math.floor(h * 0.040)) + 'px Arial';
-  ctx.fillText('OBJECT', ex + cross + 8, ey + 7);
-
-  // only X/Y numbers, no extra garbage
-  ctx.fillStyle = '#e8f1ff';
-  ctx.font = Math.max(14, Math.floor(h * 0.040)) + 'px Arial';
-  ctx.fillText(
-    `X=${state.estimate.x.toFixed(3)}   Y=${state.estimate.y.toFixed(3)}`,
-    18,
-    34
-  );
 }
 
 async function fetchState(){
   try{
     const r = await fetch('/api/state?ts=' + Date.now());
     const state = await r.json();
-
     lastState = state;
     draw(state);
 
     const age = Date.now() - (state.updated_ms || 0);
-
-    if(age < 1000){
-      statusEl.textContent = 'данные идут';
-      statusEl.style.color = '#49d17d';
-    }else{
-      statusEl.textContent = 'данные устарели';
-      statusEl.style.color = '#ffcf5a';
-    }
+    statusEl.textContent = age < 1000 ? 'данные идут' : 'данные устарели';
+    statusEl.style.color = age < 1000 ? '#49d17d' : '#ffcf5a';
   }catch(e){
     statusEl.textContent = 'нет связи';
     statusEl.style.color = '#ff5f6d';
-
-    if(lastState){
-      draw(lastState);
-    }
+    if(lastState) draw(lastState);
   }
 }
 
-setInterval(fetchState, 120);
+setInterval(fetchState,120);
 fetchState();
 </script>
 </body>

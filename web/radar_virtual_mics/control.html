@@ -3,302 +3,105 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Radar Control Console</title>
+<title>Acoustic Radar Control</title>
 <style>
 *{box-sizing:border-box}
-
 html,body{
   margin:0;
   width:100%;
-  min-height:100%;
+  height:100%;
+  overflow:hidden;
   font-family:Arial,sans-serif;
   background:#03070b;
   color:#dff4ff;
 }
-
-body{
-  overflow-x:hidden;
-}
-
 header{
-  height:46px;
+  height:44px;
   padding:8px 14px;
-  background:linear-gradient(180deg,#07101a,#03070b);
-  border-bottom:1px solid #1f3447;
+  background:#050b12;
+  border-bottom:1px solid #24394d;
   display:flex;
-  align-items:center;
   justify-content:space-between;
-}
-
-h1{
-  margin:0;
-  font-size:19px;
-  letter-spacing:1px;
-  color:#bfffe0;
-}
-
-.topStatus{
-  display:flex;
-  gap:12px;
   align-items:center;
-  font-size:13px;
-  color:#8fa3bd;
 }
-
-.lamp{
-  display:inline-block;
-  width:10px;
-  height:10px;
-  border-radius:50%;
-  background:#49d17d;
-  box-shadow:0 0 10px #49d17d;
-}
-
+h1{margin:0;font-size:18px;color:#bfffe0;letter-spacing:1px}
+#status{font-size:13px;color:#49d17d}
 .console{
-  height:calc(100vh - 46px);
-  min-height:680px;
-  padding:10px;
+  height:calc(100vh - 44px);
   display:grid;
-  grid-template-columns:280px minmax(520px,1fr) 320px;
-  grid-template-rows:minmax(390px,1fr) 245px;
+  grid-template-columns:310px minmax(520px,1fr) 330px;
+  grid-template-rows:minmax(360px,1fr) 250px;
   gap:10px;
+  padding:10px;
 }
-
 .panel{
-  background:linear-gradient(180deg,#0d1722,#081019);
+  background:linear-gradient(180deg,#0d1722,#071019);
   border:1px solid #263b50;
   border-radius:12px;
-  box-shadow:inset 0 0 20px rgba(0,0,0,.35);
   padding:10px;
   min-width:0;
   min-height:0;
 }
-
-.panelTitle{
+.title{
   color:#8fffc0;
   font-size:13px;
   letter-spacing:1px;
   text-transform:uppercase;
-  margin-bottom:8px;
   border-bottom:1px solid #263b50;
   padding-bottom:5px;
+  margin-bottom:8px;
 }
-
-.radarPanel{
-  grid-column:2;
-  grid-row:1;
-  padding:10px;
-  display:flex;
-  flex-direction:column;
-}
-
-.radarFrame{
-  flex:1;
-  min-height:0;
-  border:2px solid #25425a;
-  border-radius:14px;
-  background:#010509;
-  padding:8px;
-  box-shadow:
-    inset 0 0 35px rgba(73,209,125,.10),
-    0 0 22px rgba(73,209,125,.08);
-}
-
+.left{grid-column:1;grid-row:1 / span 2;display:grid;grid-template-rows:280px auto;gap:10px}
+.center{grid-column:2;grid-row:1;display:flex;flex-direction:column}
+.right{grid-column:3;grid-row:1 / span 2;display:flex;flex-direction:column;gap:10px}
+.bottom{grid-column:2;grid-row:2;display:grid;grid-template-columns:1fr 1fr;gap:10px}
 canvas{
   width:100%;
   height:100%;
   display:block;
-  background:radial-gradient(circle at center,#05130d,#010509 70%);
+  background:#010509;
+  border:1px solid #263b50;
   border-radius:10px;
 }
-
-.leftPanel{
-  grid-column:1;
-  grid-row:1 / span 2;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-.rightPanel{
-  grid-column:3;
-  grid-row:1 / span 2;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-.bottomPanel{
-  grid-column:2;
-  grid-row:2;
-  display:grid;
-  grid-template-columns:1fr 1fr 1fr;
-  gap:10px;
-}
-
+.radarBox{flex:1;min-height:0;border:2px solid #25425a;border-radius:14px;padding:8px;background:#010509}
 button,input[type=file]{
   width:100%;
-  padding:11px;
-  border-radius:9px;
+  padding:10px;
+  border-radius:8px;
   border:1px solid #31516b;
   background:linear-gradient(180deg,#1a2b3b,#0d1925);
   color:#e8f8ff;
-  font-size:15px;
-}
-
-button{
-  cursor:pointer;
-  font-weight:bold;
-}
-
-button:hover{
-  border-color:#49d17d;
-  box-shadow:0 0 8px rgba(73,209,125,.35);
-}
-
-.bigButton{
-  min-height:58px;
-  font-size:17px;
-}
-
-.danger{
-  background:linear-gradient(180deg,#50202a,#1b0b0f);
-  border-color:#803040;
-}
-
-.warn{
-  background:linear-gradient(180deg,#4a3814,#1d1608);
-  border-color:#806420;
-}
-
-.good{
-  background:linear-gradient(180deg,#1b4b32,#092016);
-  border-color:#2d8050;
-}
-
-.row{
-  display:grid;
-  grid-template-columns:84px 1fr 54px;
-  gap:8px;
-  align-items:center;
-  margin-bottom:10px;
-}
-
-.rowWide{
-  display:grid;
-  grid-template-columns:120px 1fr 64px;
-  gap:8px;
-  align-items:center;
-  margin-bottom:10px;
-}
-
-label{
-  color:#b9cde0;
-  font-size:13px;
-}
-
-input[type=range]{
-  width:100%;
-  accent-color:#49d17d;
-}
-
-.value{
-  color:#e8f8ff;
-  font-weight:bold;
-  text-align:right;
   font-size:14px;
 }
-
-.metricGrid{
+button{cursor:pointer;font-weight:bold}
+button:hover{border-color:#49d17d;box-shadow:0 0 8px rgba(73,209,125,.35)}
+.good{background:linear-gradient(180deg,#1b4b32,#092016)}
+.warn{background:linear-gradient(180deg,#4a3814,#1d1608)}
+.danger{background:linear-gradient(180deg,#50202a,#1b0b0f)}
+.row{
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:86px 1fr 58px;
   gap:8px;
-}
-
-.metric{
-  padding:9px;
-  background:#050c13;
-  border:1px solid #263b50;
-  border-radius:8px;
-}
-
-.metric span{
-  display:block;
-  color:#7f95ad;
-  font-size:12px;
-}
-
-.metric b{
-  display:block;
-  font-size:22px;
-  margin-top:3px;
-  color:#e8f8ff;
-}
-
-.micCard{
-  padding:9px;
-  background:#050c13;
-  border:1px solid #263b50;
-  border-radius:8px;
+  align-items:center;
   margin-bottom:8px;
 }
-
-.bar{
-  height:10px;
-  background:#02070c;
-  border:1px solid #263b50;
-  border-radius:999px;
-  overflow:hidden;
-  margin-top:5px;
-}
-
-.fill{
-  height:100%;
-  width:0%;
-  background:#49d17d;
-  box-shadow:0 0 8px rgba(73,209,125,.55);
-}
-
-.joystick{
-  position:relative;
-  height:180px;
-  background:#040a10;
-  border:1px solid #263b50;
-  border-radius:12px;
-  overflow:hidden;
-  touch-action:none;
-  cursor:crosshair;
-}
-
-.joyGrid{
-  position:absolute;
-  inset:0;
-  background:
-    linear-gradient(90deg,transparent 49%,rgba(73,209,125,.18) 50%,transparent 51%),
-    linear-gradient(0deg,transparent 49%,rgba(73,209,125,.18) 50%,transparent 51%);
-}
-
-.joyDot{
-  position:absolute;
-  width:22px;
-  height:22px;
-  margin-left:-11px;
-  margin-top:-11px;
-  border-radius:50%;
-  background:#ffcf5a;
-  box-shadow:0 0 16px rgba(255,207,90,.8);
-  left:50%;
-  top:50%;
-}
-
+label{color:#b9cde0;font-size:13px}
+input[type=range]{width:100%;accent-color:#49d17d}
+.value{text-align:right;font-weight:bold;font-size:13px}
+.metricGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.metric{padding:8px;background:#050c13;border:1px solid #263b50;border-radius:8px}
+.metric span{display:block;color:#7f95ad;font-size:12px}
+.metric b{display:block;font-size:21px;margin-top:3px}
+.micCard{padding:8px;background:#050c13;border:1px solid #263b50;border-radius:8px;margin-bottom:8px}
+.bar{height:10px;background:#02070c;border:1px solid #263b50;border-radius:999px;overflow:hidden;margin-top:5px}
+.fill{height:100%;width:0%;background:#49d17d;box-shadow:0 0 8px rgba(73,209,125,.55)}
 pre{
   margin:0;
   color:#8fa3bd;
   font-size:12px;
-  line-height:1.35;
+  line-height:1.3;
   white-space:pre-wrap;
   user-select:text;
-  cursor:text;
   max-height:180px;
   overflow:auto;
   background:#03080d;
@@ -306,470 +109,235 @@ pre{
   border-radius:8px;
   padding:8px;
 }
-
-a{
-  color:#49d17d;
-  font-weight:bold;
-}
-
+a{color:#49d17d;font-weight:bold}
 @media(max-width:1150px){
-  .console{
-    height:auto;
-    min-height:0;
-    grid-template-columns:1fr;
-    grid-template-rows:auto;
-  }
-
-  .leftPanel,.rightPanel,.radarPanel,.bottomPanel{
-    grid-column:auto;
-    grid-row:auto;
-  }
-
-  .radarPanel{
-    min-height:440px;
-  }
-
-  .bottomPanel{
-    grid-template-columns:1fr;
-  }
+  html,body{overflow:auto;height:auto}
+  .console{height:auto;display:block}
+  .panel{margin-bottom:10px}
+  .left,.center,.right,.bottom{display:block}
+  .center{height:460px}
 }
 </style>
 </head>
 <body>
 <header>
-  <h1>Ремонтная рота (BPS) 2026г.</h1>
-  <div class="topStatus">
-    <span><span class="lamp"></span> SERVER</span>
-    <span id="sendStatus">ожидание</span>
-  </div>
+  <h1>ACOUSTIC RADAR CONTROL</h1>
+  <div id="status">сервер: ожидание</div>
 </header>
 
 <div class="console">
-  <aside class="leftPanel">
+  <aside class="left">
     <section class="panel">
-      <div class="panelTitle">Звук</div>
-      <input id="file" type="file" accept="audio/*">
-      <div style="height:8px"></div>
-      <button id="playBtn" class="bigButton good">▶ Старт / пауза</button>
-      <div style="height:8px"></div>
-      <button id="autoBtn" class="bigButton warn">Авто-движение: выкл</button>
-      <div style="height:8px"></div>
-      <button id="testSignalBtn" class="bigButton">TEST SIGNAL: выкл</button>
-      <div style="height:8px"></div>
-      <button id="stopBtn" class="bigButton danger">■ Стоп / сброс</button>
+      <div class="title">Левое окно поиска: жёлтый объект</div>
+      <canvas id="searchCanvas"></canvas>
     </section>
 
     <section class="panel">
-      <div class="panelTitle">Ручное наведение</div>
-
-      <div class="joystick" id="joystick">
-        <div class="joyGrid"></div>
-        <div class="joyDot" id="joyDot"></div>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="row">
-        <label>Source X</label>
-        <input id="srcX" type="range" min="0" max="1000" value="500">
-        <span class="value" id="srcXv">0.50</span>
-      </div>
-
-      <div class="row">
-        <label>Source Y</label>
-        <input id="srcY" type="range" min="0" max="1000" value="500">
-        <span class="value" id="srcYv">0.50</span>
-      </div>
-
-      <div class="row">
-        <label>Speed</label>
-        <input id="speed" type="range" min="1" max="100" value="25">
-        <span class="value" id="speedv">25</span>
-      </div>
+      <div class="title">Управление звуком</div>
+      <input id="file" type="file" accept="audio/*">
+      <div style="height:8px"></div>
+      <button id="playBtn" class="good">▶ Старт / пауза аудио</button>
+      <div style="height:8px"></div>
+      <button id="testBtn" class="warn">TEST SIGNAL: выкл</button>
+      <div style="height:8px"></div>
+      <button id="releaseBtn" class="danger">Снять захват цели</button>
     </section>
   </aside>
 
-  <section class="radarPanel panel">
-    <div class="panelTitle">Радар оператора</div>
-    <div class="radarFrame">
-      <canvas id="radar"></canvas>
+  <section class="center panel">
+    <div class="title">Главный монитор радара: ЦЕЛЬ</div>
+    <div class="radarBox">
+      <canvas id="mainCanvas"></canvas>
     </div>
   </section>
 
-  <aside class="rightPanel">
+  <aside class="right">
     <section class="panel">
-      <div class="panelTitle">Цель / расчёт</div>
+      <div class="title">Данные</div>
       <div class="metricGrid">
-        <div class="metric"><span>X</span><b id="xOut">0.50</b></div>
-        <div class="metric"><span>Y</span><b id="yOut">0.50</b></div>
+        <div class="metric"><span>Объект X</span><b id="objX">0.50</b></div>
+        <div class="metric"><span>Объект Y</span><b id="objY">0.50</b></div>
         <div class="metric"><span>Частота</span><b id="freqOut">0 Hz</b></div>
         <div class="metric"><span>Громкость</span><b id="volOut">0%</b></div>
+      </div>
+      <div style="height:8px"></div>
+      <div class="metric">
+        <span>Статус цели</span>
+        <b id="lockOut">НЕ ЗАХВАЧЕНА</b>
       </div>
     </section>
 
     <section class="panel">
-      <div class="panelTitle">Микрофоны / усиление</div>
+      <div class="title">Громкость микрофонов</div>
       <div id="micControls"></div>
     </section>
 
     <section class="panel">
-      <div class="panelTitle">Планшет</div>
-      <div style="font-size:13px;color:#8fa3bd;line-height:1.45">
-        Монитор:
-        <br>
-        <a href="/monitor.html?v=5" target="_blank">/monitor.html</a>
-        <br><br>
-        На планшете только карта и точка X/Y.
-      </div>
+      <div class="title">Планшет</div>
+      <a href="/monitor.html?v=13" target="_blank">Открыть монитор планшета</a>
     </section>
   </aside>
 
-  <section class="bottomPanel">
+  <section class="bottom">
     <div class="panel">
-      <div class="panelTitle">Режимы</div>
-      <button id="centerBtn">Центр</button>
-      <div style="height:8px"></div>
-      <button id="leftPassBtn">Проход слева → вправо</button>
-      <div style="height:8px"></div>
-      <button id="circleBtn">Круговой проход</button>
-    </div>
-
-    <div class="panel">
-      <div class="panelTitle">Общий уровень</div>
-
-      <div class="rowWide">
-        <label>Master gain</label>
+      <div class="title">Общая чувствительность</div>
+      <div class="row">
+        <label>Master</label>
         <input id="masterGain" type="range" min="0" max="300" value="100">
         <span class="value" id="masterGainV">1.00</span>
       </div>
-
-      <div class="rowWide">
-        <label>Sensitivity</label>
-        <input id="sensitivity" type="range" min="10" max="800" value="350">
-        <span class="value" id="sensitivityV">3.50</span>
+      <div class="row">
+        <label>Speed</label>
+        <input id="speed" type="range" min="1" max="100" value="25">
+        <span class="value" id="speedV">25</span>
       </div>
-
-      <button id="saveSettingsBtn">Сохранить настройки</button>
-      <div style="height:8px"></div>
-      <button id="resetSettingsBtn" class="warn">Сбросить настройки</button>
+      <button id="copyBtn">Копировать диагностику</button>
     </div>
 
     <div class="panel">
-      <div class="panelTitle">Диагностика</div>
-      <button id="copyDebugBtn">Копировать диагностику</button>
-      <div style="height:8px"></div>
-      <pre id="debug">Загрузи аудиофайл мотоцикла или включи TEST SIGNAL.</pre>
+      <div class="title">Диагностика</div>
+      <pre id="debug">Жёлтый кружок двигается от громкости MIC1-MIC4. Кликни по нему в левом окне, чтобы захватить цель.</pre>
     </div>
   </section>
 </div>
 
 <script>
-const radar = document.getElementById('radar');
-const ctx = radar.getContext('2d');
+const searchCanvas = document.getElementById('searchCanvas');
+const searchCtx = searchCanvas.getContext('2d');
+const mainCanvas = document.getElementById('mainCanvas');
+const mainCtx = mainCanvas.getContext('2d');
 
 const fileInput = document.getElementById('file');
 const playBtn = document.getElementById('playBtn');
-const stopBtn = document.getElementById('stopBtn');
-const autoBtn = document.getElementById('autoBtn');
-const testSignalBtn = document.getElementById('testSignalBtn');
-const copyDebugBtn = document.getElementById('copyDebugBtn');
+const testBtn = document.getElementById('testBtn');
+const releaseBtn = document.getElementById('releaseBtn');
+const copyBtn = document.getElementById('copyBtn');
 
-const centerBtn = document.getElementById('centerBtn');
-const leftPassBtn = document.getElementById('leftPassBtn');
-const circleBtn = document.getElementById('circleBtn');
-
-const srcX = document.getElementById('srcX');
-const srcY = document.getElementById('srcY');
-const speed = document.getElementById('speed');
 const masterGain = document.getElementById('masterGain');
-const sensitivity = document.getElementById('sensitivity');
-const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-const resetSettingsBtn = document.getElementById('resetSettingsBtn');
-
-const srcXv = document.getElementById('srcXv');
-const srcYv = document.getElementById('srcYv');
-const speedv = document.getElementById('speedv');
+const speed = document.getElementById('speed');
 const masterGainV = document.getElementById('masterGainV');
-const sensitivityV = document.getElementById('sensitivityV');
+const speedV = document.getElementById('speedV');
 
-const xOut = document.getElementById('xOut');
-const yOut = document.getElementById('yOut');
+const objX = document.getElementById('objX');
+const objY = document.getElementById('objY');
 const freqOut = document.getElementById('freqOut');
 const volOut = document.getElementById('volOut');
-const debug = document.getElementById('debug');
+const lockOut = document.getElementById('lockOut');
 const micControls = document.getElementById('micControls');
-const sendStatus = document.getElementById('sendStatus');
-
-const joystick = document.getElementById('joystick');
-const joyDot = document.getElementById('joyDot');
+const debug = document.getElementById('debug');
+const statusEl = document.getElementById('status');
 
 let audioCtx = null;
 let analyser = null;
 let sourceNode = null;
 let audioBuffer = null;
-
 let playing = false;
 let pausedAt = 0;
 let startedAt = 0;
-
-let autoMove = false;
 let testSignal = false;
-let motionMode = 'manual';
-let t0 = performance.now();
+
+let targetLocked = false;
+let target = {x:0.5,y:0.5};
 
 const mics = [
-  {id:1,name:'MIC1 LT',x:0.12,y:0.12,gain:1,volume:0.50,level:0},
-  {id:2,name:'MIC2 RT',x:0.88,y:0.12,gain:1,volume:0.50,level:0},
-  {id:3,name:'MIC3 LB',x:0.12,y:0.88,gain:1,volume:0.50,level:0},
-  {id:4,name:'MIC4 RB',x:0.88,y:0.88,gain:1,volume:0.50,level:0}
+  {id:1,name:'MIC1 LT',x:0.12,y:0.12,volume:0.50,gain:1,level:0},
+  {id:2,name:'MIC2 RT',x:0.88,y:0.12,volume:0.50,gain:1,level:0},
+  {id:3,name:'MIC3 LB',x:0.12,y:0.88,volume:0.50,gain:1,level:0},
+  {id:4,name:'MIC4 RB',x:0.88,y:0.88,volume:0.50,gain:1,level:0}
 ];
 
-function clamp(v,a,b){
-  return Math.max(a,Math.min(b,v));
-}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-function resizeRadar(){
-  const rect = radar.getBoundingClientRect();
+function resizeCanvas(c){
+  const rect = c.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  radar.width = Math.max(600, Math.floor(rect.width * dpr));
-  radar.height = Math.max(360, Math.floor(rect.height * dpr));
+  c.width = Math.max(320, Math.floor(rect.width * dpr));
+  c.height = Math.max(220, Math.floor(rect.height * dpr));
 }
 
-window.addEventListener('resize', resizeRadar);
-resizeRadar();
-
-function setSource(x,y){
-  x = clamp(x,0,1);
-  y = clamp(y,0,1);
-
-  srcX.value = Math.round(x * 1000);
-  srcY.value = Math.round(y * 1000);
-
-  updateJoyDot(x,y);
+function resizeAll(){
+  resizeCanvas(searchCanvas);
+  resizeCanvas(mainCanvas);
 }
-
-function updateJoyDot(x,y){
-  joyDot.style.left = (x * 100) + '%';
-  joyDot.style.top = (y * 100) + '%';
-}
-
-function joystickSetFromEvent(e){
-  const rect = joystick.getBoundingClientRect();
-  const pointer = e.touches ? e.touches[0] : e;
-
-  const x = clamp((pointer.clientX - rect.left) / rect.width, 0, 1);
-  const y = clamp((pointer.clientY - rect.top) / rect.height, 0, 1);
-
-  autoMove = false;
-  motionMode = 'manual';
-  autoBtn.textContent = 'Авто-движение: выкл';
-
-  setSource(x,y);
-}
-
-joystick.addEventListener('mousedown', e => {
-  joystickSetFromEvent(e);
-  const move = ev => joystickSetFromEvent(ev);
-  const up = () => {
-    window.removeEventListener('mousemove', move);
-    window.removeEventListener('mouseup', up);
-  };
-  window.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', up);
-});
-
-joystick.addEventListener('touchstart', e => {
-  e.preventDefault();
-  joystickSetFromEvent(e);
-}, {passive:false});
-
-joystick.addEventListener('touchmove', e => {
-  e.preventDefault();
-  joystickSetFromEvent(e);
-}, {passive:false});
-
-
-const SETTINGS_KEY = 'radar_console_settings_v1';
-
-function getSettings(){
-  return {
-    srcX: Number(srcX.value),
-    srcY: Number(srcY.value),
-    speed: Number(speed.value),
-    masterGain: Number(masterGain.value),
-    sensitivity: Number(sensitivity.value),
-    micGains: mics.map(m => ({
-      id: m.id,
-      gain: m.gain,
-      volume: m.volume
-    }))
-  };
-}
+window.addEventListener('resize', resizeAll);
+resizeAll();
 
 function saveSettings(){
-  const data = getSettings();
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
-  debug.textContent = 'Настройки сохранены:\n' + JSON.stringify(data, null, 2);
+  const data = {
+    masterGain:Number(masterGain.value),
+    speed:Number(speed.value),
+    mics:mics.map(m=>({id:m.id,volume:m.volume,gain:m.gain}))
+  };
+  localStorage.setItem('radar_control_v13', JSON.stringify(data));
 }
 
 function loadSettings(){
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if(!raw) return;
-
   try{
+    const raw = localStorage.getItem('radar_control_v13');
+    if(!raw) return;
     const data = JSON.parse(raw);
-
-    if(Number.isFinite(data.srcX)) srcX.value = data.srcX;
-    if(Number.isFinite(data.srcY)) srcY.value = data.srcY;
-    if(Number.isFinite(data.speed)) speed.value = data.speed;
     if(Number.isFinite(data.masterGain)) masterGain.value = data.masterGain;
-    if(Number.isFinite(data.sensitivity)) sensitivity.value = data.sensitivity;
-
-    if(Array.isArray(data.micGains)){
-      for(const saved of data.micGains){
-        const mic = mics.find(m => m.id === saved.id);
-        if(mic && Number.isFinite(saved.gain)){
-          mic.gain = saved.gain;
-        }
-        if(mic && Number.isFinite(saved.volume)){
-          mic.volume = saved.volume;
-        }
+    if(Number.isFinite(data.speed)) speed.value = data.speed;
+    if(Array.isArray(data.mics)){
+      for(const saved of data.mics){
+        const mic = mics.find(m=>m.id === saved.id);
+        if(!mic) continue;
+        if(Number.isFinite(saved.volume)) mic.volume = saved.volume;
+        if(Number.isFinite(saved.gain)) mic.gain = saved.gain;
       }
     }
-
-    updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
-  }catch(e){
-    console.warn('Bad saved radar settings', e);
-  }
-}
-
-function resetSettings(){
-  localStorage.removeItem(SETTINGS_KEY);
-
-  srcX.value = 500;
-  srcY.value = 500;
-  speed.value = 25;
-  masterGain.value = 100;
-  sensitivity.value = 350;
-
-  for(const mic of mics){
-    mic.gain = 1;
-    mic.volume = 0.5;
-  }
-
-  const gainSliders = document.querySelectorAll('[id^="gain"]');
-  for(const el of gainSliders){
-    if(el.type === 'range') el.value = 100;
-  }
-
-  for(const mic of mics){
-    const gainValue = document.getElementById('gain' + mic.id + 'v');
-    const volSlider = document.getElementById('vol' + mic.id);
-    const volValue = document.getElementById('vol' + mic.id + 'v');
-
-    if(gainValue) gainValue.textContent = '1.00';
-    if(volSlider) volSlider.value = 50;
-    if(volValue) volValue.textContent = '50%';
-  }
-
-  setSource(0.5, 0.5);
-
-  debug.textContent = 'Настройки сброшены.';
+  }catch(e){}
 }
 
 function makeMicControls(){
-  micControls.innerHTML='';
-
+  micControls.innerHTML = '';
   for(const mic of mics){
     const div = document.createElement('div');
     div.className = 'micCard';
     div.innerHTML = `
       <div class="row">
         <label>${mic.name}</label>
-        <input id="vol${mic.id}" type="range" min="0" max="100" value="50">
-        <span class="value" id="vol${mic.id}v">50%</span>
+        <input id="vol${mic.id}" type="range" min="0" max="100" value="${Math.round(mic.volume*100)}">
+        <span class="value" id="vol${mic.id}v">${Math.round(mic.volume*100)}%</span>
       </div>
-
       <div class="row">
         <label>gain</label>
-        <input id="gain${mic.id}" type="range" min="0" max="300" value="100">
-        <span class="value" id="gain${mic.id}v">1.00</span>
+        <input id="gain${mic.id}" type="range" min="0" max="300" value="${Math.round(mic.gain*100)}">
+        <span class="value" id="gain${mic.id}v">${mic.gain.toFixed(2)}</span>
       </div>
-
       <div class="bar"><div class="fill" id="level${mic.id}"></div></div>
-      <div style="margin-top:5px;color:#8fa3bd;font-size:12px">
-        итоговый level: <span id="level${mic.id}txt">0%</span>
-      </div>
     `;
-
     micControls.appendChild(div);
 
-    const volSlider = div.querySelector('#vol'+mic.id);
-    const volValue = div.querySelector('#vol'+mic.id+'v');
+    const vol = div.querySelector('#vol'+mic.id);
+    const volV = div.querySelector('#vol'+mic.id+'v');
+    const gain = div.querySelector('#gain'+mic.id);
+    const gainV = div.querySelector('#gain'+mic.id+'v');
 
-    const slider = div.querySelector('#gain'+mic.id);
-    const value = div.querySelector('#gain'+mic.id+'v');
-
-    volSlider.addEventListener('input',()=>{
-      mic.volume = Number(volSlider.value) / 100;
-      volValue.textContent = Math.round(mic.volume * 100) + '%';
+    vol.addEventListener('input',()=>{
+      mic.volume = Number(vol.value)/100;
+      volV.textContent = Math.round(mic.volume*100)+'%';
       saveSettings();
     });
 
-    slider.addEventListener('input',()=>{
-      mic.gain = Number(slider.value) / 100;
-      value.textContent = mic.gain.toFixed(2);
+    gain.addEventListener('input',()=>{
+      mic.gain = Number(gain.value)/100;
+      gainV.textContent = mic.gain.toFixed(2);
       saveSettings();
     });
   }
-}
-
-function getSource(now){
-  if(!autoMove){
-    return {
-      x:Number(srcX.value)/1000,
-      y:Number(srcY.value)/1000
-    };
-  }
-
-  const sp = Number(speed.value) / 100;
-  const t = (now - t0) / 1000 * sp;
-
-  let x = 0.5;
-  let y = 0.5;
-
-  if(motionMode === 'leftpass'){
-    x = ((t * 0.25) % 1.2) - 0.1;
-    y = 0.5 + 0.18 * Math.sin(t * 2.0);
-  }else if(motionMode === 'circle'){
-    x = 0.5 + 0.36 * Math.cos(t * 1.4);
-    y = 0.5 + 0.30 * Math.sin(t * 1.4);
-  }else{
-    x = 0.5 + 0.38 * Math.cos(t * 1.7);
-    y = 0.5 + 0.30 * Math.sin(t * 1.1);
-  }
-
-  x = clamp(x,0,1);
-  y = clamp(y,0,1);
-
-  srcX.value = Math.round(x * 1000);
-  srcY.value = Math.round(y * 1000);
-  updateJoyDot(x,y);
-
-  return {x,y};
 }
 
 function audioMetrics(){
   if(testSignal){
-    const t = performance.now() / 1000;
-    const fakeRms = 0.22 + 0.12 * Math.abs(Math.sin(t * 2.7));
-    const fakeFreq = Math.round(85 + 35 * Math.sin(t * 1.3));
-    return {rms:fakeRms, peakHz:fakeFreq};
+    const t = performance.now()/1000;
+    return {
+      rms: 0.24 + 0.12*Math.abs(Math.sin(t*2.4)),
+      peakHz: Math.round(90 + 35*Math.sin(t*1.3))
+    };
   }
 
-  if(!analyser || !audioCtx){
-    return {rms:0,peakHz:0};
-  }
+  if(!analyser || !audioCtx) return {rms:0, peakHz:0};
 
   const n = analyser.fftSize;
   const td = new Uint8Array(n);
@@ -777,48 +345,28 @@ function audioMetrics(){
 
   let sum = 0;
   for(let i=0;i<n;i++){
-    const v = (td[i] - 128) / 128;
+    const v = (td[i]-128)/128;
     sum += v*v;
   }
-
   const rms = Math.sqrt(sum/n);
 
   const fd = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(fd);
 
-  let max = 0;
-  let idx = 0;
-
+  let max=0, idx=0;
   for(let i=2;i<fd.length;i++){
-    if(fd[i] > max){
-      max = fd[i];
-      idx = i;
-    }
+    if(fd[i] > max){ max=fd[i]; idx=i; }
   }
 
-  return {
-    rms,
-    peakHz: Math.round(idx * audioCtx.sampleRate / analyser.fftSize)
-  };
+  return {rms, peakHz:Math.round(idx*audioCtx.sampleRate/analyser.fftSize)};
 }
 
-function computeMics(src,rms){
-  let total = 0;
-  let wx = 0;
-  let wy = 0;
+function computeObject(){
+  let total = 0, wx = 0, wy = 0;
+  const master = Number(masterGain.value)/100;
 
-  const master = Number(masterGain.value) / 100;
-
-  /*
-    ВАЖНО:
-    Положение X/Y теперь считается именно от громкостей микрофонов.
-    mic.volume — основной ручной уровень микрофона.
-    mic.gain   — индивидуальная поправка/усиление.
-    master     — общий уровень.
-  */
   for(const mic of mics){
     mic.level = clamp(mic.volume * mic.gain * master, 0, 1);
-
     const w = mic.level + 0.0001;
     total += w;
     wx += mic.x * w;
@@ -831,186 +379,240 @@ function computeMics(src,rms){
   };
 }
 
-function drawRadar(state){
-  resizeRadar();
-
-  const w = radar.width;
-  const h = radar.height;
-  const cx = w/2;
-  const cy = h/2;
-  const rMax = Math.min(w,h) * 0.44;
-
-  ctx.clearRect(0,0,w,h);
-
+function drawGrid(ctx,w,h){
   ctx.fillStyle = '#010509';
   ctx.fillRect(0,0,w,h);
 
-  // glow
-  const grad = ctx.createRadialGradient(cx,cy,10,cx,cy,rMax*1.25);
-  grad.addColorStop(0,'rgba(73,209,125,0.10)');
-  grad.addColorStop(0.65,'rgba(73,209,125,0.035)');
-  grad.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,w,h);
-
-  // radar circles
-  ctx.strokeStyle = 'rgba(73,209,125,0.28)';
+  ctx.strokeStyle = 'rgba(73,209,125,.18)';
   ctx.lineWidth = 1;
-
-  for(let i=1;i<=4;i++){
-    ctx.beginPath();
-    ctx.arc(cx,cy,rMax*i/4,0,Math.PI*2);
-    ctx.stroke();
+  for(let i=0;i<=10;i++){
+    const x=i*w/10, y=i*h/10;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
   }
 
-  // cross
-  ctx.beginPath();
-  ctx.moveTo(cx-rMax,cy);
-  ctx.lineTo(cx+rMax,cy);
-  ctx.moveTo(cx,cy-rMax);
-  ctx.lineTo(cx,cy+rMax);
-  ctx.stroke();
-
-  // diagonal lines
-  for(let a=0;a<Math.PI*2;a+=Math.PI/4){
-    ctx.beginPath();
-    ctx.moveTo(cx,cy);
-    ctx.lineTo(cx+Math.cos(a)*rMax,cy+Math.sin(a)*rMax);
-    ctx.stroke();
-  }
-
-  // sweep
-  const sweepA = (performance.now()/900) % (Math.PI*2);
-  ctx.strokeStyle = 'rgba(73,209,125,0.65)';
+  ctx.strokeStyle = 'rgba(73,209,125,.35)';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cx,cy);
-  ctx.lineTo(cx+Math.cos(sweepA)*rMax,cy+Math.sin(sweepA)*rMax);
-  ctx.stroke();
-
-  // mics
-  for(const mic of state.mics){
-    const mx = cx + (mic.x - 0.5) * rMax * 2;
-    const my = cy + (mic.y - 0.5) * rMax * 2;
-
-    ctx.beginPath();
-    ctx.arc(mx,my,6,0,Math.PI*2);
-    ctx.fillStyle = '#49d17d';
-    ctx.fill();
-
-    ctx.fillStyle = '#78a890';
-    ctx.font = '12px Arial';
-    ctx.fillText('M'+mic.id,mx+8,my-6);
-  }
-
-  // target point from microphone volume sliders
-  const ex = cx + (state.estimate.x - 0.5) * rMax * 2;
-  const ey = cy + (state.estimate.y - 0.5) * rMax * 2;
-
-  ctx.strokeStyle = '#ff5f6d';
-  ctx.lineWidth = 3;
-
-  ctx.beginPath();
-  ctx.arc(ex,ey,16,0,Math.PI*2);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(ex-24,ey);
-  ctx.lineTo(ex+24,ey);
-  ctx.moveTo(ex,ey-24);
-  ctx.lineTo(ex,ey+24);
-  ctx.stroke();
-
-  ctx.fillStyle = '#ff5f6d';
-  ctx.font = 'bold 17px Arial';
-  ctx.fillText('ЦЕЛЬ',ex+24,ey+6);
-
-  // info
-  ctx.fillStyle = '#dff4ff';
-  ctx.font = '18px Arial';
-  ctx.fillText(`X=${state.estimate.x.toFixed(3)}  Y=${state.estimate.y.toFixed(3)}`,18,30);
-
-  ctx.fillStyle = '#8fa3bd';
-  ctx.font = '14px Arial';
-  ctx.fillText(`VOL=${Math.round(state.audio.volume*100)}%  FREQ=${state.audio.freq}Hz`,18,52);
+  ctx.strokeRect(2,2,w-4,h-4);
 }
 
-function updateUI(state){
-  srcXv.textContent = state.source.x.toFixed(2);
-  srcYv.textContent = state.source.y.toFixed(2);
-  speedv.textContent = String(state.source.speed);
+function drawSearch(object){
+  resizeCanvas(searchCanvas);
+  const w = searchCanvas.width, h = searchCanvas.height;
+  drawGrid(searchCtx,w,h);
+
+  for(const mic of mics){
+    const mx = mic.x*w, my = mic.y*h;
+    searchCtx.beginPath();
+    searchCtx.arc(mx,my,6 + mic.level*18,0,Math.PI*2);
+    searchCtx.fillStyle = `rgba(73,209,125,${0.3 + mic.level*0.5})`;
+    searchCtx.fill();
+
+    searchCtx.fillStyle = '#8fa3bd';
+    searchCtx.font = '12px Arial';
+    searchCtx.fillText('M'+mic.id,mx+8,my-6);
+  }
+
+  const ox = object.x*w, oy = object.y*h;
+
+  searchCtx.beginPath();
+  searchCtx.arc(ox,oy,12,0,Math.PI*2);
+  searchCtx.fillStyle = '#ffcf5a';
+  searchCtx.fill();
+
+  searchCtx.strokeStyle = '#ffe89a';
+  searchCtx.lineWidth = 2;
+  searchCtx.beginPath();
+  searchCtx.arc(ox,oy,20,0,Math.PI*2);
+  searchCtx.stroke();
+
+  searchCtx.fillStyle = '#ffcf5a';
+  searchCtx.font = 'bold 15px Arial';
+  searchCtx.fillText('ОБЪЕКТ', ox+18, oy-12);
+
+  searchCtx.fillStyle = '#dff4ff';
+  searchCtx.font = '14px Arial';
+  searchCtx.fillText(`X=${object.x.toFixed(3)} Y=${object.y.toFixed(3)}`, 12, 22);
+
+  if(!targetLocked){
+    searchCtx.fillStyle = '#8fa3bd';
+    searchCtx.font = '13px Arial';
+    searchCtx.fillText('Кликни по жёлтому объекту для захвата цели', 12, h-14);
+  }
+}
+
+function drawMain(object){
+  resizeCanvas(mainCanvas);
+  const w = mainCanvas.width, h = mainCanvas.height;
+  const cx = w/2, cy = h/2;
+  const rMax = Math.min(w,h)*0.43;
+
+  mainCtx.fillStyle = '#010509';
+  mainCtx.fillRect(0,0,w,h);
+
+  mainCtx.strokeStyle = 'rgba(73,209,125,.25)';
+  mainCtx.lineWidth = 1;
+  for(let i=1;i<=4;i++){
+    mainCtx.beginPath();
+    mainCtx.arc(cx,cy,rMax*i/4,0,Math.PI*2);
+    mainCtx.stroke();
+  }
+  for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+    mainCtx.beginPath();
+    mainCtx.moveTo(cx,cy);
+    mainCtx.lineTo(cx+Math.cos(a)*rMax, cy+Math.sin(a)*rMax);
+    mainCtx.stroke();
+  }
+
+  const sweep = (performance.now()/900) % (Math.PI*2);
+  mainCtx.strokeStyle = 'rgba(73,209,125,.65)';
+  mainCtx.lineWidth = 2;
+  mainCtx.beginPath();
+  mainCtx.moveTo(cx,cy);
+  mainCtx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
+  mainCtx.stroke();
+
+  if(targetLocked){
+    mainCtx.strokeStyle = '#ff5f6d';
+    mainCtx.lineWidth = 4;
+
+    mainCtx.beginPath();
+    mainCtx.arc(cx,cy,24,0,Math.PI*2);
+    mainCtx.stroke();
+
+    mainCtx.beginPath();
+    mainCtx.moveTo(cx-42,cy);
+    mainCtx.lineTo(cx+42,cy);
+    mainCtx.moveTo(cx,cy-42);
+    mainCtx.lineTo(cx,cy+42);
+    mainCtx.stroke();
+
+    mainCtx.fillStyle = '#ff5f6d';
+    mainCtx.font = 'bold 26px Arial';
+    mainCtx.fillText('ЦЕЛЬ', cx+50, cy+8);
+
+    mainCtx.fillStyle = '#dff4ff';
+    mainCtx.font = '18px Arial';
+    mainCtx.fillText(`Захвачено: X=${target.x.toFixed(3)} Y=${target.y.toFixed(3)}`, 18, 32);
+  }else{
+    mainCtx.fillStyle = '#8fa3bd';
+    mainCtx.font = '24px Arial';
+    mainCtx.fillText('ЦЕЛЬ НЕ ЗАХВАЧЕНА', 24, 42);
+
+    const ox = cx + (object.x-0.5)*rMax*2;
+    const oy = cy + (object.y-0.5)*rMax*2;
+    mainCtx.beginPath();
+    mainCtx.arc(ox,oy,9,0,Math.PI*2);
+    mainCtx.fillStyle = '#ffcf5a';
+    mainCtx.fill();
+  }
+}
+
+function updateUi(object,audio){
+  objX.textContent = object.x.toFixed(2);
+  objY.textContent = object.y.toFixed(2);
+  freqOut.textContent = audio.peakHz + ' Hz';
+  volOut.textContent = Math.round(audio.rms*100) + '%';
 
   masterGainV.textContent = (Number(masterGain.value)/100).toFixed(2);
-  sensitivityV.textContent = (Number(sensitivity.value)/100).toFixed(2);
+  speedV.textContent = speed.value;
 
-  xOut.textContent = state.estimate.x.toFixed(2);
-  yOut.textContent = state.estimate.y.toFixed(2);
-  freqOut.textContent = state.audio.freq + ' Hz';
-  volOut.textContent = Math.round(state.audio.volume*100) + '%';
+  lockOut.textContent = targetLocked ? 'ЦЕЛЬ' : 'НЕ ЗАХВАЧЕНА';
+  lockOut.style.color = targetLocked ? '#ff5f6d' : '#ffcf5a';
 
   for(const mic of mics){
     const pct = Math.round(mic.level*100);
-
     const bar = document.getElementById('level'+mic.id);
-    const txt = document.getElementById('level'+mic.id+'txt');
-    const volSlider = document.getElementById('vol'+mic.id);
-    const volValue = document.getElementById('vol'+mic.id+'v');
-
     if(bar) bar.style.width = pct + '%';
-    if(txt) txt.textContent = pct + '%';
-
-    if(volSlider) volSlider.value = Math.round(mic.volume * 100);
-    if(volValue) volValue.textContent = Math.round(mic.volume * 100) + '%';
   }
 
   debug.textContent =
-`mode=${motionMode}
-auto=${autoMove}
+`object_from_mic_volumes:
+x=${object.x.toFixed(3)}
+y=${object.y.toFixed(3)}
 
-object_x=${state.estimate.x.toFixed(3)}
-object_y=${state.estimate.y.toFixed(3)}
-crosshair_x=${state.estimate.x.toFixed(3)}
-crosshair_y=${state.estimate.y.toFixed(3)}
-freq=${state.audio.freq} Hz
-volume=${state.audio.volume.toFixed(4)}
+target:
+locked=${targetLocked}
+x=${target.x.toFixed(3)}
+y=${target.y.toFixed(3)}
+
+audio:
+volume=${audio.rms.toFixed(4)}
+freq=${audio.peakHz}
 
 mics:
-${mics.map(m=>m.name+' volume='+m.volume.toFixed(2)+' gain='+m.gain.toFixed(2)+' level='+m.level.toFixed(3)).join('\n')}`;
+${mics.map(m=>`${m.name} volume=${m.volume.toFixed(2)} gain=${m.gain.toFixed(2)} level=${m.level.toFixed(3)}`).join('\n')}`;
 }
 
-async function sendState(state){
+async function sendState(object,audio){
+  const state = {
+    object,
+    target:{locked:targetLocked,x:target.x,y:target.y},
+    estimate: targetLocked ? {x:0.5,y:0.5} : object,
+    source: object,
+    audio:{volume:audio.rms,freq:audio.peakHz},
+    mics,
+    updated_ms:Date.now()
+  };
+
   try{
     await fetch('/api/state',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(state)
     });
-
-    sendStatus.textContent = 'передача данных';
-    sendStatus.style.color = '#49d17d';
+    statusEl.textContent = 'сервер: данные идут';
+    statusEl.style.color = '#49d17d';
   }catch(e){
-    sendStatus.textContent = 'ошибка связи';
-    sendStatus.style.color = '#ff5f6d';
+    statusEl.textContent = 'сервер: ошибка';
+    statusEl.style.color = '#ff5f6d';
   }
 }
 
-async function loadAudio(file){
-  if(!audioCtx){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+searchCanvas.addEventListener('click', e=>{
+  const rect = searchCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+  const object = computeObject();
+  const dx = x-object.x;
+  const dy = y-object.y;
+  const d = Math.sqrt(dx*dx + dy*dy);
 
+  if(d < 0.10){
+    targetLocked = true;
+    target = {x:object.x,y:object.y};
+  }
+});
+
+releaseBtn.addEventListener('click',()=>{
+  targetLocked = false;
+});
+
+testBtn.addEventListener('click',()=>{
+  testSignal = !testSignal;
+  testBtn.textContent = testSignal ? 'TEST SIGNAL: вкл' : 'TEST SIGNAL: выкл';
+});
+
+copyBtn.addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.writeText(debug.textContent || '');
+    statusEl.textContent = 'диагностика скопирована';
+  }catch(e){}
+});
+
+masterGain.addEventListener('input',saveSettings);
+speed.addEventListener('input',saveSettings);
+
+async function loadAudio(file){
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const data = await file.arrayBuffer();
   audioBuffer = await audioCtx.decodeAudioData(data);
   pausedAt = 0;
-
-  debug.textContent = `Файл загружен: ${file.name}
-duration=${audioBuffer.duration.toFixed(2)} sec
-sampleRate=${audioBuffer.sampleRate}`;
 }
 
 function playPause(){
   if(!audioBuffer){
-    alert('Сначала загрузи звуковой файл.');
+    alert('Сначала загрузи аудиофайл или включи TEST SIGNAL.');
     return;
   }
 
@@ -1018,7 +620,7 @@ function playPause(){
     try{sourceNode.stop();}catch(e){}
     pausedAt = audioCtx.currentTime - startedAt;
     playing = false;
-    playBtn.textContent = '▶ Старт / пауза';
+    playBtn.textContent = '▶ Старт / пауза аудио';
     return;
   }
 
@@ -1035,27 +637,8 @@ function playPause(){
 
   startedAt = audioCtx.currentTime - pausedAt;
   sourceNode.start(0, pausedAt % audioBuffer.duration);
-
   playing = true;
   playBtn.textContent = '⏸ Пауза';
-}
-
-function stopAll(){
-  if(sourceNode){
-    try{sourceNode.stop();}catch(e){}
-  }
-
-  playing = false;
-  pausedAt = 0;
-  playBtn.textContent = '▶ Старт / пауза';
-
-  autoMove = false;
-  testSignal = false;
-  motionMode = 'manual';
-  autoBtn.textContent = 'Авто-движение: выкл';
-  testSignalBtn.textContent = 'TEST SIGNAL: выкл';
-
-  setSource(0.5,0.5);
 }
 
 fileInput.addEventListener('change',async()=>{
@@ -1064,161 +647,25 @@ fileInput.addEventListener('change',async()=>{
 });
 
 playBtn.addEventListener('click',async()=>{
-  if(!audioCtx){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-
-  if(audioCtx.state === 'suspended'){
-    await audioCtx.resume();
-  }
-
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === 'suspended') await audioCtx.resume();
   playPause();
 });
 
-stopBtn.addEventListener('click',stopAll);
+function frame(){
+  const audio = audioMetrics();
+  const object = computeObject();
 
-autoBtn.addEventListener('click',()=>{
-  autoMove = !autoMove;
-  motionMode = autoMove ? 'auto' : 'manual';
-  autoBtn.textContent = autoMove ? 'Авто-движение: вкл' : 'Авто-движение: выкл';
-  t0 = performance.now();
-});
-
-testSignalBtn.addEventListener('click',()=>{
-  testSignal = !testSignal;
-  testSignalBtn.textContent = testSignal ? 'TEST SIGNAL: вкл' : 'TEST SIGNAL: выкл';
-
-  if(testSignal && !autoMove){
-    autoMove = true;
-    motionMode = 'auto';
-    autoBtn.textContent = 'Авто-движение: вкл';
-    t0 = performance.now();
-  }
-});
-
-centerBtn.addEventListener('click',()=>{
-  autoMove = false;
-  motionMode = 'manual';
-  autoBtn.textContent = 'Авто-движение: выкл';
-  setSource(0.5,0.5);
-});
-
-leftPassBtn.addEventListener('click',()=>{
-  autoMove = true;
-  motionMode = 'leftpass';
-  autoBtn.textContent = 'Авто-движение: вкл';
-  t0 = performance.now();
-});
-
-circleBtn.addEventListener('click',()=>{
-  autoMove = true;
-  motionMode = 'circle';
-  autoBtn.textContent = 'Авто-движение: вкл';
-  t0 = performance.now();
-});
-
-srcX.addEventListener('input',()=>{
-  autoMove = false;
-  motionMode = 'manual';
-  autoBtn.textContent = 'Авто-движение: выкл';
-  updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
-});
-
-srcY.addEventListener('input',()=>{
-  autoMove = false;
-  motionMode = 'manual';
-  autoBtn.textContent = 'Авто-движение: выкл';
-  updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
-});
-
-copyDebugBtn.addEventListener('click', async ()=>{
-  const text = debug.textContent || '';
-
-  try{
-    await navigator.clipboard.writeText(text);
-    sendStatus.textContent = 'диагностика скопирована';
-    sendStatus.style.color = '#49d17d';
-  }catch(e){
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-
-    sendStatus.textContent = 'диагностика скопирована';
-    sendStatus.style.color = '#49d17d';
-  }
-});
-
-function frame(now){
-  // getSource оставляем для старых режимов движения, но объект теперь считается от громкостей микрофонов
-  const sourceControl = getSource(now);
-  const audioRaw = audioMetrics();
-  const estimate = computeMics(sourceControl,audioRaw.rms);
-
-  // ВАЖНО:
-  // source теперь специально равен estimate,
-  // чтобы на мониторе объект и перекрестие были одной логической целью.
-  const state = {
-    source:{
-      x:estimate.x,
-      y:estimate.y,
-      auto:autoMove,
-      speed:Number(speed.value),
-      mode:'mic_volume_object'
-    },
-    audio:{
-      volume:audioRaw.rms,
-      freq:audioRaw.peakHz
-    },
-    mics:mics,
-    estimate:estimate,
-    updated_ms:Date.now()
-  };
-
-  drawRadar(state);
-  updateUI(state);
-  sendState(state);
+  drawSearch(object);
+  drawMain(object);
+  updateUi(object,audio);
+  sendState(object,audio);
 
   requestAnimationFrame(frame);
 }
 
-makeMicControls();
 loadSettings();
-
-for(const mic of mics){
-  const slider = document.getElementById('gain' + mic.id);
-  const value = document.getElementById('gain' + mic.id + 'v');
-  const volSlider = document.getElementById('vol' + mic.id);
-  const volValue = document.getElementById('vol' + mic.id + 'v');
-
-  if(slider) slider.value = Math.round(mic.gain * 100);
-  if(value) value.textContent = mic.gain.toFixed(2);
-
-  if(volSlider) volSlider.value = Math.round(mic.volume * 100);
-  if(volValue) volValue.textContent = Math.round(mic.volume * 100) + '%';
-}
-
-updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
-
-saveSettingsBtn.addEventListener('click', saveSettings);
-resetSettingsBtn.addEventListener('click', resetSettings);
-
-srcX.addEventListener('change', saveSettings);
-srcY.addEventListener('change', saveSettings);
-speed.addEventListener('change', saveSettings);
-masterGain.addEventListener('change', saveSettings);
-sensitivity.addEventListener('change', saveSettings);
-
-for(const mic of mics){
-  const slider = document.getElementById('gain' + mic.id);
-  const volSlider = document.getElementById('vol' + mic.id);
-
-  if(slider) slider.addEventListener('change', saveSettings);
-  if(volSlider) volSlider.addEventListener('change', saveSettings);
-}
-
+makeMicControls();
 requestAnimationFrame(frame);
 </script>
 </body>
