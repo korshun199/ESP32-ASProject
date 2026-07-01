@@ -150,22 +150,7 @@ function draw(state){
     }
   }
 
-  // real virtual source, small yellow point
-  if(state.source){
-    const sx = state.source.x * w;
-    const sy = state.source.y * h;
-
-    ctx.beginPath();
-    ctx.arc(sx, sy, 8, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffcf5a';
-    ctx.fill();
-
-    ctx.fillStyle = '#ffcf5a';
-    ctx.font = 'bold ' + Math.max(11, Math.floor(h * 0.030)) + 'px Arial';
-    ctx.fillText('SRC', sx + 12, sy - 8);
-  }
-
-  // estimated sound point, main red cross
+  // object from microphone volume sliders, main red cross
   const ex = state.estimate.x * w;
   const ey = state.estimate.y * h;
 
@@ -188,7 +173,7 @@ function draw(state){
 
   ctx.fillStyle = '#ff5f6d';
   ctx.font = 'bold ' + Math.max(15, Math.floor(h * 0.040)) + 'px Arial';
-  ctx.fillText('X/Y', ex + cross + 8, ey + 7);
+  ctx.fillText('OBJECT', ex + cross + 8, ey + 7);
 
   // only X/Y numbers, no extra garbage
   ctx.fillStyle = '#e8f1ff';

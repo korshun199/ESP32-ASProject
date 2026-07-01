@@ -903,16 +903,7 @@ function drawRadar(state){
     ctx.fillText('M'+mic.id,mx+8,my-6);
   }
 
-  // virtual source
-  const sx = cx + (state.source.x - 0.5) * rMax * 2;
-  const sy = cy + (state.source.y - 0.5) * rMax * 2;
-
-  ctx.beginPath();
-  ctx.arc(sx,sy,8,0,Math.PI*2);
-  ctx.fillStyle = '#ffcf5a';
-  ctx.fill();
-
-  // estimated point
+  // target point from microphone volume sliders
   const ex = cx + (state.estimate.x - 0.5) * rMax * 2;
   const ey = cy + (state.estimate.y - 0.5) * rMax * 2;
 
@@ -976,10 +967,10 @@ function updateUI(state){
 `mode=${motionMode}
 auto=${autoMove}
 
-source_x=${state.source.x.toFixed(3)}
-source_y=${state.source.y.toFixed(3)}
-estimated_x=${state.estimate.x.toFixed(3)}
-estimated_y=${state.estimate.y.toFixed(3)}
+object_x=${state.estimate.x.toFixed(3)}
+object_y=${state.estimate.y.toFixed(3)}
+crosshair_x=${state.estimate.x.toFixed(3)}
+crosshair_y=${state.estimate.y.toFixed(3)}
 freq=${state.audio.freq} Hz
 volume=${state.audio.volume.toFixed(4)}
 
@@ -1161,17 +1152,21 @@ copyDebugBtn.addEventListener('click', async ()=>{
 });
 
 function frame(now){
-  const source = getSource(now);
+  // getSource оставляем для старых режимов движения, но объект теперь считается от громкостей микрофонов
+  const sourceControl = getSource(now);
   const audioRaw = audioMetrics();
-  const estimate = computeMics(source,audioRaw.rms);
+  const estimate = computeMics(sourceControl,audioRaw.rms);
 
+  // ВАЖНО:
+  // source теперь специально равен estimate,
+  // чтобы на мониторе объект и перекрестие были одной логической целью.
   const state = {
     source:{
-      x:source.x,
-      y:source.y,
+      x:estimate.x,
+      y:estimate.y,
       auto:autoMove,
       speed:Number(speed.value),
-      mode:motionMode
+      mode:'mic_volume_object'
     },
     audio:{
       volume:audioRaw.rms,
