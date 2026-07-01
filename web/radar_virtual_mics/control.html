@@ -244,7 +244,7 @@ let target = {x:0.5,y:0.5};
 
 let randomMotion = false;
 let randomObject = {x:0.5,y:0.5};
-let randomVelocity = {x:0.018,y:0.014};
+let randomVelocity = {x:0.0045,y:0.0035};
 let lastRandomMs = performance.now();
 
 const mics = [
@@ -379,7 +379,7 @@ function updateRandomObject(){
 
   // Увеличенный размах случайного движения.
   // Теперь объект ходит заметно по радару, а не изображает дрожащую точку.
-  const motionScale = 2.8;
+  const motionScale = 1.15;
 
   randomObject.x += randomVelocity.x * dt * motionScale;
   randomObject.y += randomVelocity.y * dt * motionScale;
@@ -396,11 +396,11 @@ function updateRandomObject(){
 
   // Чуть-чуть меняем траекторию, чтобы объект не был скучным, как отчёт бухгалтерии.
   const t = now / 1000;
-  randomVelocity.x += Math.sin(t * 1.7) * 0.00022;
-  randomVelocity.y += Math.cos(t * 1.3) * 0.00022;
+  randomVelocity.x += Math.sin(t * 1.7) * 0.000035;
+  randomVelocity.y += Math.cos(t * 1.3) * 0.000035;
 
-  randomVelocity.x = clamp(randomVelocity.x, -0.030, 0.030);
-  randomVelocity.y = clamp(randomVelocity.y, -0.030, 0.030);
+  randomVelocity.x = clamp(randomVelocity.x, -0.009, 0.009);
+  randomVelocity.y = clamp(randomVelocity.y, -0.009, 0.009);
 
   // Эмулируем громкости микрофонов от положения случайного объекта.
   for(const mic of mics){
@@ -409,9 +409,11 @@ function updateRandomObject(){
     const d = Math.sqrt(dx*dx + dy*dy);
 
     // Чем ближе объект к микрофону, тем сильнее его уровень.
-    // Формула сделана резче, чтобы позиция заметнее гуляла по радару.
-    const level = clamp(1 / (0.08 + d*d*2.2), 0, 1);
-    mic.volume = clamp(level, 0, 1);
+    // Ползунки теперь индикаторы сигнала, а не источник координаты случайного объекта.
+    const targetLevel = clamp(1 / (0.18 + d*d*3.6), 0, 1);
+
+    // Сглаживание, чтобы ползунки не дергались как нервная осциллограмма.
+    mic.volume = mic.volume * 0.88 + targetLevel * 0.12;
 
     const volSlider = document.getElementById('vol' + mic.id);
     const volValue = document.getElementById('vol' + mic.id + 'v');
@@ -424,6 +426,27 @@ function updateRandomObject(){
 function computeObject(){
   if(randomMotion){
     updateRandomObject();
+
+    // При случайном движении жёлтый объект двигается напрямую.
+    // Уровни микрофонов только отображают, откуда приходит сигнал.
+    // Иначе координата усредняется обратно к центру, и объект почти не движется.
+    let signal = 0;
+    const master = Number(masterGain.value)/100;
+
+    for(const mic of mics){
+      mic.level = clamp(mic.volume * mic.gain * master, 0, 1);
+      signal += mic.level;
+    }
+
+    return {
+      visible:true,
+      x:randomObject.x,
+      y:randomObject.y,
+      rawX:randomObject.x,
+      rawY:randomObject.y,
+      amp:1,
+      signal:signal
+    };
   }
 
   let total = 0, wx = 0, wy = 0;
@@ -865,8 +888,8 @@ randomBtn.addEventListener('click',()=>{
     targetLocked = false;
     randomObject = {x:Math.random()*0.84 + 0.08, y:Math.random()*0.84 + 0.08};
     randomVelocity = {
-      x:(Math.random() > 0.5 ? 1 : -1) * (0.012 + Math.random()*0.018),
-      y:(Math.random() > 0.5 ? 1 : -1) * (0.010 + Math.random()*0.018)
+      x:(Math.random() > 0.5 ? 1 : -1) * (0.0035 + Math.random()*0.0045),
+      y:(Math.random() > 0.5 ? 1 : -1) * (0.0030 + Math.random()*0.0040)
     };
     lastRandomMs = performance.now();
     testSignal = true;
