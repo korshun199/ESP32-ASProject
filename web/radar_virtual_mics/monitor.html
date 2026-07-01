@@ -12,7 +12,7 @@ html,body{
   height:100%;
   overflow:hidden;
   font-family:Arial,sans-serif;
-  background:#03060a;
+  background:#02050a;
   color:#e8f1ff;
 }
 body{
@@ -20,44 +20,28 @@ body{
   flex-direction:column;
 }
 header{
-  height:38px;
-  min-height:38px;
+  height:34px;
+  min-height:34px;
   padding:5px 10px;
   background:#05070b;
   border-bottom:1px solid #263447;
   display:flex;
-  justify-content:space-between;
   align-items:center;
+  justify-content:space-between;
 }
 h1{
   margin:0;
-  font-size:16px;
+  font-size:15px;
   line-height:1;
 }
-.status{
-  font-size:12px;
+#status{
+  font-size:11px;
   color:#8fa3bd;
-  white-space:nowrap;
 }
 main{
   flex:1;
   min-height:0;
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 210px;
-  gap:6px;
-  padding:6px;
-}
-.panel{
-  background:#0b111a;
-  border:1px solid #263447;
-  border-radius:10px;
-  padding:6px;
-  min-width:0;
-  min-height:0;
-}
-.mapPanel{
-  min-width:0;
-  min-height:0;
+  padding:5px;
 }
 canvas{
   width:100%;
@@ -66,47 +50,6 @@ canvas{
   background:#02050a;
   border:1px solid #263447;
   border-radius:8px;
-}
-.side{
-  min-width:0;
-  display:grid;
-  gap:6px;
-  align-content:start;
-}
-.metric{
-  padding:6px 7px;
-  background:#081019;
-  border:1px solid #263447;
-  border-radius:7px;
-  min-width:0;
-}
-.metric span{
-  display:block;
-  color:#8fa3bd;
-  font-size:11px;
-  line-height:1.1;
-}
-.metric b{
-  display:block;
-  font-size:18px;
-  line-height:1.05;
-  margin-top:2px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.bar{
-  height:8px;
-  background:#071019;
-  border:1px solid #263447;
-  border-radius:999px;
-  overflow:hidden;
-  margin-top:4px;
-}
-.fill{
-  height:100%;
-  width:0%;
-  background:#49d17d;
 }
 
 @media (orientation: portrait){
@@ -126,232 +69,166 @@ canvas{
     font-weight:bold;
   }
 }
-
-@media (max-width:900px) and (orientation:landscape){
-  header{
-    height:32px;
-    min-height:32px;
-  }
-  h1{
-    font-size:14px;
-  }
-  .status{
-    font-size:11px;
-  }
-  main{
-    grid-template-columns:minmax(0,1fr) 180px;
-    gap:5px;
-    padding:5px;
-  }
-  .metric{
-    padding:5px;
-  }
-  .metric b{
-    font-size:15px;
-  }
-  .metric span{
-    font-size:10px;
-  }
-}
 </style>
 </head>
 <body>
 <header>
   <h1>Монитор радара</h1>
-  <div class="status" id="status">ожидание...</div>
+  <div id="status">ожидание...</div>
 </header>
 
 <main>
-  <section class="panel mapPanel">
-    <canvas id="map" width="1200" height="700"></canvas>
-  </section>
-
-  <aside class="side">
-    <div class="metric"><span>X</span><b id="xOut">0.50</b></div>
-    <div class="metric"><span>Y</span><b id="yOut">0.50</b></div>
-    <div class="metric"><span>Частота</span><b id="freqOut">0 Hz</b></div>
-    <div class="metric"><span>Громкость</span><b id="volOut">0%</b></div>
-
-    <div class="metric">
-      <span>MIC1 LT</span>
-      <b id="mic1txt">0%</b>
-      <div class="bar"><div class="fill" id="mic1bar"></div></div>
-    </div>
-
-    <div class="metric">
-      <span>MIC2 RT</span>
-      <b id="mic2txt">0%</b>
-      <div class="bar"><div class="fill" id="mic2bar"></div></div>
-    </div>
-
-    <div class="metric">
-      <span>MIC3 LB</span>
-      <b id="mic3txt">0%</b>
-      <div class="bar"><div class="fill" id="mic3bar"></div></div>
-    </div>
-
-    <div class="metric">
-      <span>MIC4 RB</span>
-      <b id="mic4txt">0%</b>
-      <div class="bar"><div class="fill" id="mic4bar"></div></div>
-    </div>
-  </aside>
+  <canvas id="map"></canvas>
 </main>
 
 <script>
-const canvas=document.getElementById('map');
-const ctx=canvas.getContext('2d');
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
 
-const statusEl=document.getElementById('status');
-const xOut=document.getElementById('xOut');
-const yOut=document.getElementById('yOut');
-const freqOut=document.getElementById('freqOut');
-const volOut=document.getElementById('volOut');
-
-let lastState=null;
+let lastState = null;
 
 function resizeCanvas(){
-  const rect=canvas.getBoundingClientRect();
-  const dpr=window.devicePixelRatio || 1;
-  canvas.width=Math.max(600, Math.floor(rect.width*dpr));
-  canvas.height=Math.max(320, Math.floor(rect.height*dpr));
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = Math.max(640, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(360, Math.floor(rect.height * dpr));
 }
 
-window.addEventListener('resize',resizeCanvas);
+window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 function draw(state){
   resizeCanvas();
 
-  const w=canvas.width;
-  const h=canvas.height;
+  const w = canvas.width;
+  const h = canvas.height;
 
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle='#02050a';
-  ctx.fillRect(0,0,w,h);
+  ctx.clearRect(0, 0, w, h);
 
-  ctx.strokeStyle='#1b2a3b';
-  ctx.lineWidth=1;
+  ctx.fillStyle = '#02050a';
+  ctx.fillRect(0, 0, w, h);
 
-  for(let i=0;i<=10;i++){
-    const x=i*w/10;
-    const y=i*h/10;
-    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
-  }
+  // grid
+  ctx.strokeStyle = '#172538';
+  ctx.lineWidth = 1;
 
-  ctx.fillStyle='#6f8299';
-  ctx.font=Math.max(10, Math.floor(h*0.025))+'px Arial';
-
-  for(let i=0;i<=10;i++){
-    ctx.fillText((i/10).toFixed(1),i*w/10+4,h-6);
-    ctx.fillText((i/10).toFixed(1),5,i*h/10+13);
-  }
-
-  for(const mic of state.mics){
-    const mx=mic.x*w;
-    const my=mic.y*h;
-    const pulse=14+mic.level*Math.min(w,h)*0.075;
+  for(let i = 0; i <= 10; i++){
+    const x = i * w / 10;
+    const y = i * h / 10;
 
     ctx.beginPath();
-    ctx.arc(mx,my,pulse,0,Math.PI*2);
-    ctx.fillStyle=`rgba(73,209,125,${0.10+mic.level*0.55})`;
-    ctx.fill();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(mx,my,8,0,Math.PI*2);
-    ctx.fillStyle='#49d17d';
-    ctx.fill();
-
-    ctx.fillStyle='#e8f1ff';
-    ctx.font='bold '+Math.max(11,Math.floor(h*0.030))+'px Arial';
-    ctx.fillText(mic.name,mx+14,my-8);
-
-    ctx.fillStyle='#9fb3cc';
-    ctx.font=Math.max(9,Math.floor(h*0.023))+'px Arial';
-    ctx.fillText(`${Math.round(mic.level*100)}% g:${mic.gain.toFixed(2)}`,mx+14,my+10);
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
   }
 
-  const sx=state.source.x*w;
-  const sy=state.source.y*h;
+  // border
+  ctx.strokeStyle = '#33475f';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+
+  // microphones as small fixed points
+  if(state.mics){
+    for(const mic of state.mics){
+      const mx = mic.x * w;
+      const my = mic.y * h;
+
+      ctx.beginPath();
+      ctx.arc(mx, my, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#49d17d';
+      ctx.fill();
+
+      ctx.fillStyle = '#7f95ad';
+      ctx.font = Math.max(10, Math.floor(h * 0.026)) + 'px Arial';
+      ctx.fillText(mic.name.replace('MIC', 'M'), mx + 10, my - 7);
+    }
+  }
+
+  // real virtual source, small yellow point
+  if(state.source){
+    const sx = state.source.x * w;
+    const sy = state.source.y * h;
+
+    ctx.beginPath();
+    ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffcf5a';
+    ctx.fill();
+
+    ctx.fillStyle = '#ffcf5a';
+    ctx.font = 'bold ' + Math.max(11, Math.floor(h * 0.030)) + 'px Arial';
+    ctx.fillText('SRC', sx + 12, sy - 8);
+  }
+
+  // estimated sound point, main red cross
+  const ex = state.estimate.x * w;
+  const ey = state.estimate.y * h;
+
+  const cross = Math.max(22, Math.floor(Math.min(w, h) * 0.045));
+  const circle = Math.max(14, Math.floor(Math.min(w, h) * 0.030));
+
+  ctx.strokeStyle = '#ff5f6d';
+  ctx.lineWidth = Math.max(3, Math.floor(Math.min(w, h) * 0.006));
 
   ctx.beginPath();
-  ctx.arc(sx,sy,10,0,Math.PI*2);
-  ctx.fillStyle='#ffcf5a';
-  ctx.fill();
-
-  ctx.fillStyle='#ffcf5a';
-  ctx.font='bold '+Math.max(12,Math.floor(h*0.032))+'px Arial';
-  ctx.fillText('SRC',sx+14,sy-10);
-
-  const ex=state.estimate.x*w;
-  const ey=state.estimate.y*h;
-
-  ctx.strokeStyle='#ff5f6d';
-  ctx.lineWidth=3;
-
-  ctx.beginPath();
-  ctx.arc(ex,ey,16,0,Math.PI*2);
+  ctx.arc(ex, ey, circle, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(ex-24,ey);
-  ctx.lineTo(ex+24,ey);
-  ctx.moveTo(ex,ey-24);
-  ctx.lineTo(ex,ey+24);
+  ctx.moveTo(ex - cross, ey);
+  ctx.lineTo(ex + cross, ey);
+  ctx.moveTo(ex, ey - cross);
+  ctx.lineTo(ex, ey + cross);
   ctx.stroke();
 
-  ctx.fillStyle='#ff5f6d';
-  ctx.font='bold '+Math.max(13,Math.floor(h*0.034))+'px Arial';
-  ctx.fillText('X/Y',ex+22,ey+6);
+  ctx.fillStyle = '#ff5f6d';
+  ctx.font = 'bold ' + Math.max(15, Math.floor(h * 0.040)) + 'px Arial';
+  ctx.fillText('X/Y', ex + cross + 8, ey + 7);
 
-  ctx.fillStyle='#e8f1ff';
-  ctx.font=Math.max(13,Math.floor(h*0.035))+'px Arial';
-  ctx.fillText(`X=${state.estimate.x.toFixed(3)} Y=${state.estimate.y.toFixed(3)}`,18,28);
-  ctx.fillText(`Vol=${Math.round(state.audio.volume*100)}% F=${state.audio.freq}Hz`,18,56);
-}
-
-function updateUi(state){
-  xOut.textContent=state.estimate.x.toFixed(2);
-  yOut.textContent=state.estimate.y.toFixed(2);
-  freqOut.textContent=state.audio.freq+' Hz';
-  volOut.textContent=Math.round(state.audio.volume*100)+'%';
-
-  for(const mic of state.mics){
-    const pct=Math.round(mic.level*100);
-    const txt=document.getElementById('mic'+mic.id+'txt');
-    const bar=document.getElementById('mic'+mic.id+'bar');
-
-    if(txt) txt.textContent=pct+'%';
-    if(bar) bar.style.width=pct+'%';
-  }
-
-  const age=Date.now() - (state.updated_ms || 0);
-
-  if(age < 1000){
-    statusEl.textContent='данные идут';
-    statusEl.style.color='#49d17d';
-  }else{
-    statusEl.textContent='данные устарели';
-    statusEl.style.color='#ffcf5a';
-  }
+  // only X/Y numbers, no extra garbage
+  ctx.fillStyle = '#e8f1ff';
+  ctx.font = Math.max(14, Math.floor(h * 0.040)) + 'px Arial';
+  ctx.fillText(
+    `X=${state.estimate.x.toFixed(3)}   Y=${state.estimate.y.toFixed(3)}`,
+    18,
+    34
+  );
 }
 
 async function fetchState(){
   try{
-    const r=await fetch('/api/state?ts='+Date.now());
-    const state=await r.json();
-    lastState=state;
+    const r = await fetch('/api/state?ts=' + Date.now());
+    const state = await r.json();
+
+    lastState = state;
     draw(state);
-    updateUi(state);
+
+    const age = Date.now() - (state.updated_ms || 0);
+
+    if(age < 1000){
+      statusEl.textContent = 'данные идут';
+      statusEl.style.color = '#49d17d';
+    }else{
+      statusEl.textContent = 'данные устарели';
+      statusEl.style.color = '#ffcf5a';
+    }
   }catch(e){
-    statusEl.textContent='нет связи';
-    statusEl.style.color='#ff5f6d';
-    if(lastState) draw(lastState);
+    statusEl.textContent = 'нет связи';
+    statusEl.style.color = '#ff5f6d';
+
+    if(lastState){
+      draw(lastState);
+    }
   }
 }
 
-setInterval(fetchState,120);
+setInterval(fetchState, 120);
 fetchState();
 </script>
 </body>
