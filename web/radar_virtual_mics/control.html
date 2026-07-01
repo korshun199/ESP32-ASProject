@@ -438,6 +438,10 @@ a{
         <input id="sensitivity" type="range" min="10" max="800" value="350">
         <span class="value" id="sensitivityV">3.50</span>
       </div>
+
+      <button id="saveSettingsBtn">Сохранить настройки</button>
+      <div style="height:8px"></div>
+      <button id="resetSettingsBtn" class="warn">Сбросить настройки</button>
     </div>
 
     <div class="panel">
@@ -465,6 +469,8 @@ const srcY = document.getElementById('srcY');
 const speed = document.getElementById('speed');
 const masterGain = document.getElementById('masterGain');
 const sensitivity = document.getElementById('sensitivity');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const resetSettingsBtn = document.getElementById('resetSettingsBtn');
 
 const srcXv = document.getElementById('srcXv');
 const srcYv = document.getElementById('srcYv');
@@ -566,6 +572,85 @@ joystick.addEventListener('touchmove', e => {
   e.preventDefault();
   joystickSetFromEvent(e);
 }, {passive:false});
+
+
+const SETTINGS_KEY = 'radar_console_settings_v1';
+
+function getSettings(){
+  return {
+    srcX: Number(srcX.value),
+    srcY: Number(srcY.value),
+    speed: Number(speed.value),
+    masterGain: Number(masterGain.value),
+    sensitivity: Number(sensitivity.value),
+    micGains: mics.map(m => ({
+      id: m.id,
+      gain: m.gain
+    }))
+  };
+}
+
+function saveSettings(){
+  const data = getSettings();
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+  debug.textContent = 'Настройки сохранены:\n' + JSON.stringify(data, null, 2);
+}
+
+function loadSettings(){
+  const raw = localStorage.getItem(SETTINGS_KEY);
+  if(!raw) return;
+
+  try{
+    const data = JSON.parse(raw);
+
+    if(Number.isFinite(data.srcX)) srcX.value = data.srcX;
+    if(Number.isFinite(data.srcY)) srcY.value = data.srcY;
+    if(Number.isFinite(data.speed)) speed.value = data.speed;
+    if(Number.isFinite(data.masterGain)) masterGain.value = data.masterGain;
+    if(Number.isFinite(data.sensitivity)) sensitivity.value = data.sensitivity;
+
+    if(Array.isArray(data.micGains)){
+      for(const saved of data.micGains){
+        const mic = mics.find(m => m.id === saved.id);
+        if(mic && Number.isFinite(saved.gain)){
+          mic.gain = saved.gain;
+        }
+      }
+    }
+
+    updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
+  }catch(e){
+    console.warn('Bad saved radar settings', e);
+  }
+}
+
+function resetSettings(){
+  localStorage.removeItem(SETTINGS_KEY);
+
+  srcX.value = 500;
+  srcY.value = 500;
+  speed.value = 25;
+  masterGain.value = 100;
+  sensitivity.value = 350;
+
+  for(const mic of mics){
+    mic.gain = 1;
+  }
+
+  const gainSliders = document.querySelectorAll('[id^="gain"]');
+  for(const el of gainSliders){
+    if(el.type === 'range') el.value = 100;
+  }
+
+  for(const mic of mics){
+    const value = document.getElementById('gain' + mic.id + 'v');
+    if(value) value.textContent = '1.00';
+  }
+
+  setSource(0.5, 0.5);
+
+  debug.textContent = 'Настройки сброшены.';
+}
 
 function makeMicControls(){
   micControls.innerHTML='';
@@ -1026,7 +1111,32 @@ function frame(now){
 }
 
 makeMicControls();
-setSource(0.5,0.5);
+loadSettings();
+
+for(const mic of mics){
+  const slider = document.getElementById('gain' + mic.id);
+  const value = document.getElementById('gain' + mic.id + 'v');
+
+  if(slider) slider.value = Math.round(mic.gain * 100);
+  if(value) value.textContent = mic.gain.toFixed(2);
+}
+
+updateJoyDot(Number(srcX.value)/1000, Number(srcY.value)/1000);
+
+saveSettingsBtn.addEventListener('click', saveSettings);
+resetSettingsBtn.addEventListener('click', resetSettings);
+
+srcX.addEventListener('change', saveSettings);
+srcY.addEventListener('change', saveSettings);
+speed.addEventListener('change', saveSettings);
+masterGain.addEventListener('change', saveSettings);
+sensitivity.addEventListener('change', saveSettings);
+
+for(const mic of mics){
+  const slider = document.getElementById('gain' + mic.id);
+  if(slider) slider.addEventListener('change', saveSettings);
+}
+
 requestAnimationFrame(frame);
 </script>
 </body>
