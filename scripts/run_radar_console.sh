@@ -17,10 +17,10 @@ echo
 echo "=== Virtual Acoustic Radar ==="
 echo
 echo "T16 control:"
-echo "  http://$IP:$PORT/control.html?v=7"
+echo "  http://$IP:$PORT/control.html?v=8"
 echo
 echo "Tablet monitor:"
-echo "  http://$IP:$PORT/monitor.html?v=7"
+echo "  http://$IP:$PORT/monitor.html?v=8"
 echo
 echo "Stop:"
 echo "  Ctrl+C"
