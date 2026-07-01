@@ -326,12 +326,14 @@ function makeMicControls(){
       mic.volume = Number(vol.value)/100;
       volV.textContent = Math.round(mic.volume*100)+'%';
       saveSettings();
+      forcedRender();
     });
 
     gain.addEventListener('input',()=>{
       mic.gain = Number(gain.value)/100;
       gainV.textContent = mic.gain.toFixed(2);
       saveSettings();
+      forcedRender();
     });
   }
 }
@@ -467,6 +469,7 @@ function drawGrid(ctx,w,h){
 }
 
 function drawSearch(object){
+  object = object || {visible:false, x:null, y:null, signal:0};
   resizeCanvas(searchCanvas);
   const w = searchCanvas.width, h = searchCanvas.height;
   drawGrid(searchCtx,w,h);
@@ -521,6 +524,7 @@ function drawSearch(object){
 }
 
 function drawMain(object){
+  object = object || {visible:false, x:null, y:null, signal:0};
   resizeCanvas(mainCanvas);
   const w = mainCanvas.width, h = mainCanvas.height;
   const cx = w/2, cy = h/2;
@@ -605,7 +609,27 @@ function drawMain(object){
   }
 }
 
+
+function objectXText(object){
+  return object && object.visible ? object.x.toFixed(3) : 'none';
+}
+
+function objectYText(object){
+  return object && object.visible ? object.y.toFixed(3) : 'none';
+}
+
+function mainDisplayXText(object){
+  if(targetLocked) return '0.500';
+  return object && object.visible ? object.x.toFixed(3) : 'none';
+}
+
+function mainDisplayYText(object){
+  if(targetLocked) return '0.500';
+  return object && object.visible ? object.y.toFixed(3) : 'none';
+}
+
 function updateUi(object,audio){
+  object = object || {visible:false, x:null, y:null, signal:0};
   objX.textContent = object.visible ? object.x.toFixed(2) : '—';
   objY.textContent = object.visible ? object.y.toFixed(2) : '—';
   freqOut.textContent = audio.peakHz + ' Hz';
@@ -636,8 +660,8 @@ x=${target.x.toFixed(3)}
 y=${target.y.toFixed(3)}
 
 main_display:
-x=${targetLocked ? '0.500' : object.x.toFixed(3)}
-y=${targetLocked ? '0.500' : object.y.toFixed(3)}
+x=${mainDisplayXText(object)}
+y=${mainDisplayYText(object)}
 
 random_motion=${randomMotion}
 random_object_x=${randomObject.x.toFixed(3)}
@@ -750,8 +774,15 @@ copyBtn.addEventListener('click', async ()=>{
   }catch(e){}
 });
 
-masterGain.addEventListener('input',saveSettings);
-speed.addEventListener('input',saveSettings);
+masterGain.addEventListener('input',()=>{
+  saveSettings();
+  forcedRender();
+});
+
+speed.addEventListener('input',()=>{
+  saveSettings();
+  forcedRender();
+});
 
 async function loadAudio(file){
   if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -801,6 +832,17 @@ playBtn.addEventListener('click',async()=>{
   if(audioCtx.state === 'suspended') await audioCtx.resume();
   playPause();
 });
+
+
+function forcedRender(){
+  const audio = audioMetrics();
+  const object = computeObject();
+
+  drawSearch(object);
+  drawMain(object);
+  updateUi(object,audio);
+  sendState(object,audio);
+}
 
 function frame(){
   const audio = audioMetrics();
