@@ -2,39 +2,168 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Radar Monitor</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial,sans-serif;background:#03060a;color:#e8f1ff;overflow:hidden}
-header{height:54px;padding:8px 12px;background:#05070b;border-bottom:1px solid #263447;display:flex;justify-content:space-between;align-items:center}
-h1{margin:0;font-size:20px}
-.status{font-size:14px;color:#8fa3bd}
-main{height:calc(100vh - 54px);display:grid;grid-template-columns:1fr 260px;gap:8px;padding:8px}
-.panel{background:#0b111a;border:1px solid #263447;border-radius:12px;padding:8px}
-canvas{width:100%;height:100%;display:block;background:#02050a;border:1px solid #263447;border-radius:10px}
-.side{display:grid;gap:8px;grid-auto-rows:min-content}
-.metric{padding:10px;background:#081019;border:1px solid #263447;border-radius:8px}
-.metric span{display:block;color:#8fa3bd;font-size:13px}
-.metric b{display:block;font-size:28px;margin-top:4px}
-.bar{height:14px;background:#071019;border:1px solid #263447;border-radius:999px;overflow:hidden;margin-top:5px}
-.fill{height:100%;width:0%;background:#49d17d}
-@media(max-width:900px){
-  main{grid-template-columns:1fr;height:calc(100vh - 54px);overflow:auto}
-  .side{grid-template-columns:1fr 1fr}
-  .mapPanel{height:58vh}
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  font-family:Arial,sans-serif;
+  background:#03060a;
+  color:#e8f1ff;
+}
+body{
+  display:flex;
+  flex-direction:column;
+}
+header{
+  height:38px;
+  min-height:38px;
+  padding:5px 10px;
+  background:#05070b;
+  border-bottom:1px solid #263447;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+h1{
+  margin:0;
+  font-size:16px;
+  line-height:1;
+}
+.status{
+  font-size:12px;
+  color:#8fa3bd;
+  white-space:nowrap;
+}
+main{
+  flex:1;
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 210px;
+  gap:6px;
+  padding:6px;
+}
+.panel{
+  background:#0b111a;
+  border:1px solid #263447;
+  border-radius:10px;
+  padding:6px;
+  min-width:0;
+  min-height:0;
+}
+.mapPanel{
+  min-width:0;
+  min-height:0;
+}
+canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  background:#02050a;
+  border:1px solid #263447;
+  border-radius:8px;
+}
+.side{
+  min-width:0;
+  display:grid;
+  gap:6px;
+  align-content:start;
+}
+.metric{
+  padding:6px 7px;
+  background:#081019;
+  border:1px solid #263447;
+  border-radius:7px;
+  min-width:0;
+}
+.metric span{
+  display:block;
+  color:#8fa3bd;
+  font-size:11px;
+  line-height:1.1;
+}
+.metric b{
+  display:block;
+  font-size:18px;
+  line-height:1.05;
+  margin-top:2px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.bar{
+  height:8px;
+  background:#071019;
+  border:1px solid #263447;
+  border-radius:999px;
+  overflow:hidden;
+  margin-top:4px;
+}
+.fill{
+  height:100%;
+  width:0%;
+  background:#49d17d;
+}
+
+@media (orientation: portrait){
+  body::before{
+    content:"Поверни планшет горизонтально";
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+    padding:24px;
+    background:#03060a;
+    color:#ffcf5a;
+    font-size:24px;
+    font-weight:bold;
+  }
+}
+
+@media (max-width:900px) and (orientation:landscape){
+  header{
+    height:32px;
+    min-height:32px;
+  }
+  h1{
+    font-size:14px;
+  }
+  .status{
+    font-size:11px;
+  }
+  main{
+    grid-template-columns:minmax(0,1fr) 180px;
+    gap:5px;
+    padding:5px;
+  }
+  .metric{
+    padding:5px;
+  }
+  .metric b{
+    font-size:15px;
+  }
+  .metric span{
+    font-size:10px;
+  }
 }
 </style>
 </head>
 <body>
 <header>
-  <h1>Монитор акустического радара</h1>
-  <div class="status" id="status">ожидание данных...</div>
+  <h1>Монитор радара</h1>
+  <div class="status" id="status">ожидание...</div>
 </header>
 
 <main>
   <section class="panel mapPanel">
-    <canvas id="map" width="1000" height="700"></canvas>
+    <canvas id="map" width="1200" height="700"></canvas>
   </section>
 
   <aside class="side">
@@ -81,82 +210,105 @@ const volOut=document.getElementById('volOut');
 
 let lastState=null;
 
+function resizeCanvas(){
+  const rect=canvas.getBoundingClientRect();
+  const dpr=window.devicePixelRatio || 1;
+  canvas.width=Math.max(600, Math.floor(rect.width*dpr));
+  canvas.height=Math.max(320, Math.floor(rect.height*dpr));
+}
+
+window.addEventListener('resize',resizeCanvas);
+resizeCanvas();
+
 function draw(state){
-  const w=canvas.width,h=canvas.height;
+  resizeCanvas();
+
+  const w=canvas.width;
+  const h=canvas.height;
+
   ctx.clearRect(0,0,w,h);
   ctx.fillStyle='#02050a';
   ctx.fillRect(0,0,w,h);
 
   ctx.strokeStyle='#1b2a3b';
   ctx.lineWidth=1;
+
   for(let i=0;i<=10;i++){
-    const x=i*w/10,y=i*h/10;
+    const x=i*w/10;
+    const y=i*h/10;
     ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
   }
 
-  ctx.fillStyle='#8fa3bd';
-  ctx.font='15px Arial';
+  ctx.fillStyle='#6f8299';
+  ctx.font=Math.max(10, Math.floor(h*0.025))+'px Arial';
+
   for(let i=0;i<=10;i++){
-    ctx.fillText((i/10).toFixed(1),i*w/10+4,h-8);
-    ctx.fillText((i/10).toFixed(1),5,i*h/10+16);
+    ctx.fillText((i/10).toFixed(1),i*w/10+4,h-6);
+    ctx.fillText((i/10).toFixed(1),5,i*h/10+13);
   }
 
   for(const mic of state.mics){
-    const mx=mic.x*w,my=mic.y*h;
+    const mx=mic.x*w;
+    const my=mic.y*h;
+    const pulse=14+mic.level*Math.min(w,h)*0.075;
 
     ctx.beginPath();
-    ctx.arc(mx,my,22+mic.level*70,0,Math.PI*2);
-    ctx.fillStyle=`rgba(73,209,125,${0.10+mic.level*0.65})`;
+    ctx.arc(mx,my,pulse,0,Math.PI*2);
+    ctx.fillStyle=`rgba(73,209,125,${0.10+mic.level*0.55})`;
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(mx,my,13,0,Math.PI*2);
+    ctx.arc(mx,my,8,0,Math.PI*2);
     ctx.fillStyle='#49d17d';
     ctx.fill();
 
     ctx.fillStyle='#e8f1ff';
-    ctx.font='bold 20px Arial';
-    ctx.fillText(mic.name,mx+22,my-10);
+    ctx.font='bold '+Math.max(11,Math.floor(h*0.030))+'px Arial';
+    ctx.fillText(mic.name,mx+14,my-8);
 
     ctx.fillStyle='#9fb3cc';
-    ctx.font='16px Arial';
-    ctx.fillText(`${Math.round(mic.level*100)}% gain ${mic.gain.toFixed(2)}`,mx+22,my+14);
+    ctx.font=Math.max(9,Math.floor(h*0.023))+'px Arial';
+    ctx.fillText(`${Math.round(mic.level*100)}% g:${mic.gain.toFixed(2)}`,mx+14,my+10);
   }
 
-  const sx=state.source.x*w,sy=state.source.y*h;
+  const sx=state.source.x*w;
+  const sy=state.source.y*h;
+
   ctx.beginPath();
-  ctx.arc(sx,sy,16,0,Math.PI*2);
+  ctx.arc(sx,sy,10,0,Math.PI*2);
   ctx.fillStyle='#ffcf5a';
   ctx.fill();
 
   ctx.fillStyle='#ffcf5a';
-  ctx.font='bold 22px Arial';
-  ctx.fillText('VIRTUAL SOURCE',sx+22,sy-14);
+  ctx.font='bold '+Math.max(12,Math.floor(h*0.032))+'px Arial';
+  ctx.fillText('SRC',sx+14,sy-10);
 
-  const ex=state.estimate.x*w,ey=state.estimate.y*h;
+  const ex=state.estimate.x*w;
+  const ey=state.estimate.y*h;
+
   ctx.strokeStyle='#ff5f6d';
-  ctx.lineWidth=5;
+  ctx.lineWidth=3;
 
   ctx.beginPath();
-  ctx.arc(ex,ey,24,0,Math.PI*2);
+  ctx.arc(ex,ey,16,0,Math.PI*2);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(ex-34,ey);
-  ctx.lineTo(ex+34,ey);
-  ctx.moveTo(ex,ey-34);
-  ctx.lineTo(ex,ey+34);
+  ctx.moveTo(ex-24,ey);
+  ctx.lineTo(ex+24,ey);
+  ctx.moveTo(ex,ey-24);
+  ctx.lineTo(ex,ey+24);
   ctx.stroke();
 
   ctx.fillStyle='#ff5f6d';
-  ctx.font='bold 24px Arial';
-  ctx.fillText('SOUND POINT X/Y',ex+34,ey+8);
+  ctx.font='bold '+Math.max(13,Math.floor(h*0.034))+'px Arial';
+  ctx.fillText('X/Y',ex+22,ey+6);
 
   ctx.fillStyle='#e8f1ff';
-  ctx.font='26px Arial';
-  ctx.fillText(`X=${state.estimate.x.toFixed(3)}  Y=${state.estimate.y.toFixed(3)}`,24,38);
-  ctx.fillText(`Volume=${Math.round(state.audio.volume*100)}%  Frequency=${state.audio.freq} Hz`,24,76);
+  ctx.font=Math.max(13,Math.floor(h*0.035))+'px Arial';
+  ctx.fillText(`X=${state.estimate.x.toFixed(3)} Y=${state.estimate.y.toFixed(3)}`,18,28);
+  ctx.fillText(`Vol=${Math.round(state.audio.volume*100)}% F=${state.audio.freq}Hz`,18,56);
 }
 
 function updateUi(state){
@@ -169,13 +321,20 @@ function updateUi(state){
     const pct=Math.round(mic.level*100);
     const txt=document.getElementById('mic'+mic.id+'txt');
     const bar=document.getElementById('mic'+mic.id+'bar');
+
     if(txt) txt.textContent=pct+'%';
     if(bar) bar.style.width=pct+'%';
   }
 
   const age=Date.now() - (state.updated_ms || 0);
-  statusEl.textContent=age < 1000 ? 'данные идут' : 'данные устарели';
-  statusEl.style.color=age < 1000 ? '#49d17d' : '#ffcf5a';
+
+  if(age < 1000){
+    statusEl.textContent='данные идут';
+    statusEl.style.color='#49d17d';
+  }else{
+    statusEl.textContent='данные устарели';
+    statusEl.style.color='#ffcf5a';
+  }
 }
 
 async function fetchState(){
@@ -186,13 +345,13 @@ async function fetchState(){
     draw(state);
     updateUi(state);
   }catch(e){
-    statusEl.textContent='нет связи с сервером';
+    statusEl.textContent='нет связи';
     statusEl.style.color='#ff5f6d';
     if(lastState) draw(lastState);
   }
 }
 
-setInterval(fetchState,100);
+setInterval(fetchState,120);
 fetchState();
 </script>
 </body>
