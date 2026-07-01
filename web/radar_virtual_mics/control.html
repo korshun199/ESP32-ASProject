@@ -602,6 +602,11 @@ function drawMain(object){
     mainCtx.fillStyle = '#dff4ff';
     mainCtx.font = '18px Arial';
     mainCtx.fillText(`Захвачено: X=${target.x.toFixed(3)} Y=${target.y.toFixed(3)}`, 18, 32);
+
+    // Голубое сообщение в углу при захвате цели
+    mainCtx.fillStyle = '#5fd7ff';
+    mainCtx.font = 'bold 22px Arial';
+    mainCtx.fillText('Работа двигателей устройства', 18, 64);
   }else{
     mainCtx.fillStyle = '#8fa3bd';
     mainCtx.font = '24px Arial';
