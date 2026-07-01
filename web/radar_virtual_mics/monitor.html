@@ -113,24 +113,31 @@ function draw(state){
   ctx.lineTo(cx+Math.cos(sweep)*rMax, cy+Math.sin(sweep)*rMax);
   ctx.stroke();
 
-  const obj = state.display_object || state.object || state.source || {x:0.5,y:0.5};
-  const ox = cx + (obj.x-0.5)*rMax*2;
-  const oy = cy + (obj.y-0.5)*rMax*2;
+  const obj = state.display_object || state.object || state.source || null;
 
-  ctx.beginPath();
-  ctx.arc(ox,oy,13,0,Math.PI*2);
-  ctx.fillStyle = '#ffcf5a';
-  ctx.fill();
+  if(obj){
+    const ox = cx + (obj.x-0.5)*rMax*2;
+    const oy = cy + (obj.y-0.5)*rMax*2;
 
-  ctx.strokeStyle = '#ffe89a';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(ox,oy,22,0,Math.PI*2);
-  ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ox,oy,13,0,Math.PI*2);
+    ctx.fillStyle = '#ffcf5a';
+    ctx.fill();
 
-  ctx.fillStyle = '#ffcf5a';
-  ctx.font = 'bold 18px Arial';
-  ctx.fillText(state.target && state.target.locked ? 'ЗАХВАЧЕН' : 'ОБЪЕКТ', ox+20, oy-10);
+    ctx.strokeStyle = '#ffe89a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ox,oy,22,0,Math.PI*2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffcf5a';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText(state.target && state.target.locked ? 'ЗАХВАЧЕН' : 'ОБЪЕКТ', ox+20, oy-10);
+  }else{
+    ctx.fillStyle = '#8fa3bd';
+    ctx.font = 'bold 26px Arial';
+    ctx.fillText('СИГНАЛА НЕТ', 24, 44);
+  }
 
   if(state.target && state.target.locked){
     ctx.strokeStyle = '#ff5f6d';
