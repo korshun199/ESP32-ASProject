@@ -31,6 +31,6 @@ arduino-cli upload -p "$PORT" --fqbn "$FQBN" "$SKETCH"
 
 echo
 echo "Open:"
-echo "  http://192.168.20.77/"
-echo "  http://192.168.20.77/mobile"
-echo "  http://192.168.20.77/api/latest"
+echo "  http://192.168.4.77/"
+echo "  http://192.168.4.77/mobile"
+echo "  http://192.168.4.77/api/latest"

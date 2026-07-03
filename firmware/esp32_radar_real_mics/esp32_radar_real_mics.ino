@@ -31,10 +31,10 @@
 // =======================================================
 // СТАТИЧЕСКИЙ IP ESP32
 // =======================================================
-IPAddress localIp(192, 168, 20, 77);
-IPAddress gatewayIp(192, 168, 20, 1);
+IPAddress localIp(192, 168, 4, 77);
+IPAddress gatewayIp(192, 168, 4, 1);
 IPAddress subnetMask(255, 255, 255, 0);
-IPAddress dnsIp(192, 168, 20, 1);
+IPAddress dnsIp(192, 168, 4, 1);
 
 WebServer server(80);
 
@@ -457,8 +457,8 @@ void setup() {
 
   Serial.println("HTTP server started");
   Serial.println("Open:");
-  Serial.println("  http://192.168.20.77/");
-  Serial.println("  http://192.168.20.77/mobile");
+  Serial.println("  http://192.168.4.77/");
+  Serial.println("  http://192.168.4.77/mobile");
   Serial.println("==============================");
 }
 

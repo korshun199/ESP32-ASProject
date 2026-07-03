@@ -246,6 +246,12 @@ let esp32BufferAgeMs = 0;
 let esp32BufferSeq = 0;
 let esp32BufferObject = null;
 
+// Ограничитель отправки состояния на сервер.
+// Нельзя долбить POST /api/state 60 раз в секунду, T16 тоже хочет жить.
+let lastStateSendMs = 0;
+const STATE_SEND_INTERVAL_MS = 200;
+
+
 let targetLocked = false;
 let target = {x:0.5,y:0.5};
 
@@ -899,30 +905,34 @@ searchCanvas.addEventListener('click', e=>{
 });
 
 releaseBtn.addEventListener('click',()=>{
+  // Максимально простой сброс:
+  // снимаем только захват цели, источник данных не трогаем.
   targetLocked = false;
-  randomMotion = false;
-  testSignal = false;
-  esp32BufferMode = false;
-  esp32BufferObject = null;
+  target = {x:0.5, y:0.5};
 
-  randomBtn.textContent = 'Случайное движение: выкл';
-  testBtn.textContent = 'TEST SIGNAL: выкл';
-  esp32Btn.textContent = 'ESP32 buffer: выкл';
+  // В режиме ESP32 buffer поток должен продолжать идти как шёл.
+  // Никаких очисток микрофонов, localStorage и ручных poll здесь не делаем.
+  if(!esp32BufferMode){
+    randomMotion = false;
+    testSignal = false;
+    esp32BufferObject = null;
 
-  for(const mic of mics){
-    mic.volume = 0;
-    mic.level = 0;
+    randomBtn.textContent = 'Случайное движение: выкл';
+    testBtn.textContent = 'TEST SIGNAL: выкл';
 
-    const volSlider = document.getElementById('vol' + mic.id);
-    const volValue = document.getElementById('vol' + mic.id + 'v');
-    const bar = document.getElementById('level' + mic.id);
+    for(const mic of mics){
+      mic.volume = 0;
+      mic.level = 0;
 
-    if(volSlider) volSlider.value = 0;
-    if(volValue) volValue.textContent = '0%';
-    if(bar) bar.style.width = '0%';
+      const volSlider = document.getElementById('vol' + mic.id);
+      const volValue = document.getElementById('vol' + mic.id + 'v');
+      const bar = document.getElementById('level' + mic.id);
+
+      if(volSlider) volSlider.value = 0;
+      if(volValue) volValue.textContent = '0%';
+      if(bar) bar.style.width = '0%';
+    }
   }
-
-  saveSettings();
 });
 
 
@@ -1077,7 +1087,11 @@ function forcedRender(){
   drawSearch(object);
   drawMain(object);
   updateUi(object,audio);
-  sendState(object,audio);
+  const nowForState = Date.now();
+  if(nowForState - lastStateSendMs >= STATE_SEND_INTERVAL_MS){
+    lastStateSendMs = nowForState;
+    sendState(object,audio);
+  }
 }
 
 function frame(){
@@ -1089,7 +1103,11 @@ function frame(){
   drawSearch(object);
   drawMain(object);
   updateUi(object,audio);
-  sendState(object,audio);
+  const nowForState = Date.now();
+  if(nowForState - lastStateSendMs >= STATE_SEND_INTERVAL_MS){
+    lastStateSendMs = nowForState;
+    sendState(object,audio);
+  }
 
   requestAnimationFrame(frame);
 }

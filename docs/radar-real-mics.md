@@ -7,7 +7,7 @@ firmware/esp32_radar_real_mics/esp32_radar_real_mics.ino
 Purpose:
 
 - ESP32 connects to local Wi-Fi as a station.
-- Static IP: 192.168.20.77
+- Static IP: 192.168.4.77
 - Browser UI shows all enabled microphone channels.
 - API returns active microphone arrays.
 - User enables channels by commenting/uncommenting USE_MIC lines in the firmware.
@@ -58,6 +58,6 @@ Flash:
 
 Open:
 
-http://192.168.20.77/
-http://192.168.20.77/mobile
-http://192.168.20.77/api/latest
+http://192.168.4.77/
+http://192.168.4.77/mobile
+http://192.168.4.77/api/latest

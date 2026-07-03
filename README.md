@@ -16,9 +16,9 @@ Flash ESP32:
 
 Open interface:
 
-http://192.168.20.77/
-http://192.168.20.77/mobile
-http://192.168.20.77/api/latest
+http://192.168.4.77/
+http://192.168.4.77/mobile
+http://192.168.4.77/api/latest
 
 Microphone pins:
 
