@@ -46,6 +46,8 @@ struct MicMeasure {
   int peakToPeak;
   float volume;
   unsigned long samples;
+  unsigned int crossings;
+  unsigned int freq;
 };
 
 float clampFloat(float v, float lo, float hi) {
@@ -56,6 +58,7 @@ float clampFloat(float v, float lo, float hi) {
 
 MicMeasure measureMic() {
   MicMeasure m;
+
   m.raw = 0;
   m.rawMin = 4095;
   m.rawMax = 0;
@@ -63,29 +66,89 @@ MicMeasure measureMic() {
   m.peakToPeak = 0;
   m.volume = 0.0;
   m.samples = 0;
+  m.crossings = 0;
+  m.freq = 0;
 
-  unsigned long sum = 0;
+  // Диагностическое окно измерения.
+  // 50 мс достаточно для первичной юстировки микрофона.
+  const unsigned long windowUs = 50000UL;
+
+  // Задержка между чтениями ADC.
+  // Если поставить слишком мало, будет больше шума и нагрузки.
+  const unsigned int sampleDelayUs = 80;
+
+  // Гистерезис вокруг динамического центра.
+  // Нужен, чтобы микрошум около центра не изображал частоту.
+  const int deadband = 8;
+
   unsigned long startUs = micros();
+  unsigned long sum = 0;
 
-  while ((micros() - startUs) < SAMPLE_WINDOW_US) {
+  int firstValue = analogRead(MIC1_PIN);
+  int baseline = firstValue;
+  int state = 0; // -1 ниже центра, 0 внутри мёртвой зоны, 1 выше центра
+
+  while ((micros() - startUs) < windowUs) {
     int v = analogRead(MIC1_PIN);
 
-    if (v < m.rawMin) m.rawMin = v;
-    if (v > m.rawMax) m.rawMax = v;
+    m.raw = v;
+
+    if (v < m.rawMin) {
+      m.rawMin = v;
+    }
+
+    if (v > m.rawMax) {
+      m.rawMax = v;
+    }
 
     sum += v;
-    m.raw = v;
     m.samples++;
 
-    delayMicroseconds(SAMPLE_DELAY_US);
+    // Медленно подстраиваем центр под реальное смещение микрофона/усилителя.
+    // Это лучше, чем жёсткий 2048, потому что аналоговая жизнь грязная.
+    baseline = ((baseline * 31) + v) / 32;
+
+    int diff = v - baseline;
+    int newState = state;
+
+    if (diff > deadband) {
+      newState = 1;
+    } else if (diff < -deadband) {
+      newState = -1;
+    }
+
+    // Считаем переходы между верхней и нижней полуволной.
+    if (state != 0 && newState != 0 && newState != state) {
+      m.crossings++;
+    }
+
+    if (newState != 0) {
+      state = newState;
+    }
+
+    delayMicroseconds(sampleDelayUs);
   }
 
   if (m.samples > 0) {
     m.center = (int)(sum / m.samples);
+  } else {
+    m.rawMin = 0;
+    m.rawMax = 0;
+    m.center = 0;
   }
 
   m.peakToPeak = m.rawMax - m.rawMin;
   m.volume = clampFloat((float)m.peakToPeak / MIC_P2P_FULL_SCALE, 0.0, 1.0);
+
+  unsigned long windowMs = (micros() - startUs) / 1000UL;
+
+  // Один период даёт два перехода: вверх/вниз.
+  // freq = crossings / 2 / seconds = crossings * 500 / ms
+  if (windowMs > 0 && m.peakToPeak > 30 && m.crossings >= 2) {
+    m.freq = (unsigned int)((m.crossings * 500UL) / windowMs);
+  } else {
+    m.freq = 0;
+  }
 
   return m;
 }
@@ -122,6 +185,12 @@ void printJson(const MicMeasure& m) {
   Serial.print(",");
   Serial.print("\"samples\":");
   Serial.print(m.samples);
+  Serial.print(",");
+  Serial.print("\"crossings\":");
+  Serial.print(m.crossings);
+  Serial.print(",");
+  Serial.print("\"freq\":");
+  Serial.print(m.freq);
   Serial.print("},");
 
   // Сразу даём формат, совместимый с /api/esp32/push.
@@ -130,6 +199,8 @@ void printJson(const MicMeasure& m) {
   Serial.print(m.raw);
   Serial.print(",\"volume\":");
   Serial.print(m.volume, 4);
+  Serial.print(",\"freq\":");
+  Serial.print(m.freq);
   Serial.print("},");
   Serial.print("{\"id\":2,\"name\":\"MIC2 ПРАВО\",\"raw\":0,\"volume\":0.0},");
   Serial.print("{\"id\":3,\"name\":\"MIC3 НИЗ\",\"raw\":0,\"volume\":0.0},");
@@ -140,7 +211,8 @@ void printJson(const MicMeasure& m) {
   Serial.print("\"volume\":");
   Serial.print(m.volume, 4);
   Serial.print(",");
-  Serial.print("\"freq\":0");
+  Serial.print("\"freq\":");
+  Serial.print(m.freq);
   Serial.print("},");
 
   if (m.volume > 0.03) {
