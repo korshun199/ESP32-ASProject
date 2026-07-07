@@ -1,0 +1,44 @@
+{
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json",
+
+  "C_Cpp.default.compilerPath": "${env:HOME}/.arduino15/packages/esp32/tools/xtensa-esp-elf-gcc/esp-14.2.0_20241119/bin/xtensa-esp32-elf-g++",
+  "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+  "C_Cpp.default.cppStandard": "gnu++17",
+  "C_Cpp.default.cStandard": "gnu17",
+
+  "C_Cpp.default.forcedInclude": [
+    "${env:HOME}/.arduino15/packages/esp32/hardware/esp32/3.3.10/cores/esp32/Arduino.h"
+  ],
+
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/firmware/esp32_single_mic_serial",
+    "${env:HOME}/.arduino15/packages/esp32/hardware/esp32/3.3.10/cores/esp32",
+    "${env:HOME}/.arduino15/packages/esp32/hardware/esp32/3.3.10/variants/esp32",
+    "${env:HOME}/.arduino15/packages/esp32/tools/esp32-libs/3.3.10/qio_qspi/include"
+  ],
+
+  "C_Cpp.errorSquiggles": "enabled",
+  "C_Cpp.autocomplete": "default",
+  "C_Cpp.intelliSenseEngine": "default",
+
+  "files.associations": {
+    "*.ino": "cpp",
+    "*.h": "cpp",
+    "*.hpp": "cpp",
+    "*.c": "c",
+    "*.cpp": "cpp"
+  },
+
+  "editor.hover.enabled": true,
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": false,
+    "strings": false
+  },
+
+  "C_Cpp.codeAnalysis.clangTidy.enabled": false,
+
+  "arduino.useArduinoCli": true,
+  "arduino.path": "/usr/bin",
+  "arduino.commandPath": "arduino-cli"
+}

@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Radar: обновить подсказки VS Code",
+      "type": "shell",
+      "command": "./scripts/vscode_refresh_compile_db.sh",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
