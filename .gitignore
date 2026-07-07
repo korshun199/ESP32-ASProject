@@ -7,3 +7,5 @@ firmware/esp32_radar_real_mics/wifi_config.h
 device_reports/
 compile_commands.json
 __pycache__/
+.run/
+logs/
