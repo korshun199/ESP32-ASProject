@@ -1,21 +1,24 @@
 /*
-  ESP32-S3 TFT Radar Demo
+  SIMONG RADAR 2026
+  Экран ESP32-S3 + TFT
 
-  Назначение:
-    Первая тестовая прошивка для цифровой версии радара.
+  Этап:
+    Блок 1. Заголовок.
 
-  Что проверяем:
-    - ESP32-S3 N16R8
-    - TFT 2.8" 240x320 SPI
-    - базовый вывод графики
-    - обновление экрана
-    - будущую раскладку пинов под I2S микрофоны
+  Координатная система, как смотрит Олежка:
+    X=0, Y=0 — левый верхний угол.
+    X растёт вправо.
+    Y растёт вниз.
+    Экран смотрим альбомно.
 
-  Дисплей:
-    TPW-408-2.8
-    TFT 240xRGBx320
-    Вероятный контроллер: ILI9341
-    Интерфейс: SPI
+  Блок 1:
+    x      = 0
+    y      = 0
+    width  = 240
+    height = 40
+    фон    = голубой
+    текст  = белый
+    текст  = SIMONG RADAR 2026
 
   Подключение TFT:
     VCC    -> 3V3
@@ -27,17 +30,9 @@
     SDK    -> GPIO12
     LED    -> 3V3
 
-  Пока не подключаем:
-    T_IRQ
-    T_D0
-    T_CS
-    T_CLK
-    SDDC
-
-  Будущие I2S микрофоны:
-    BCLK   -> GPIO4
-    WS     -> GPIO5
-    DATA   -> GPIO6
+  USB:
+    Прошивка: второй USB
+    Монитор: первый USB
 */
 
 #include <Arduino.h>
@@ -45,15 +40,108 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 
+// ============================================================
+// ПИНЫ TFT
+// ============================================================
+
 #define TFT_CS    10
 #define TFT_DC    9
 #define TFT_RST   8
 #define TFT_MOSI  11
 #define TFT_SCLK  12
 
-#define MIC_I2S_BCLK 4
-#define MIC_I2S_WS   5
-#define MIC_I2S_DATA 6
+// ============================================================
+// НАСТРОЙКА ОРИЕНТАЦИИ
+// ============================================================
+
+// По результату ручной проверки нормальная базовая ориентация была ROT 0.
+// Пока оставляем её. Если физически надо будет повернуть, поменяем только тут.
+static const uint8_t TFT_ROTATION = 0;
+
+// ============================================================
+// ЦВЕТА
+// ============================================================
+
+static const uint16_t COLOR_SCREEN_BG    = ILI9341_BLACK;
+static const uint16_t COLOR_HEADER_BG    = ILI9341_BLUE;
+static const uint16_t COLOR_HEADER_TEXT  = ILI9341_WHITE;
+
+// ============================================================
+// БЛОК 1. ЗАГОЛОВОК
+// ============================================================
+
+static const int HEADER_X = 0;
+static const int HEADER_Y = 0;
+static const int HEADER_W = 240;
+static const int HEADER_H = 40;
+
+static const int HEADER_TEXT_X = 8;
+static const int HEADER_TEXT_Y = 12;
+static const int HEADER_TEXT_SIZE = 2;
+
+static const char HEADER_TEXT[] = "SIMONG RADAR 2026";
+
+// ============================================================
+// БЛОК 2. RADAR
+// ============================================================
+
+static const int RADAR_X = 0;
+static const int RADAR_Y = HEADER_Y + HEADER_H;
+static const int RADAR_W = 240;
+static const int RADAR_H = 160;
+
+static const int RADAR_TEXT_X = 8;
+static const int RADAR_TEXT_Y = 8;
+static const int RADAR_TEXT_SIZE = 2;
+
+static const uint16_t COLOR_RADAR_BG = ILI9341_BLACK;
+static const uint16_t COLOR_RADAR_BORDER = ILI9341_DARKGREY;
+static const uint16_t COLOR_RADAR_TEXT = ILI9341_WHITE;
+
+static const char RADAR_TEXT[] = "RADAR";
+
+// ============================================================
+// БЛОК 3. FOOTER
+// ============================================================
+
+static const int FOOTER_X = 0;
+static const int FOOTER_Y = RADAR_Y + RADAR_H;
+static const int FOOTER_W = 240;
+static const int FOOTER_H = 40;
+
+// ============================================================
+// ПРАВАЯ СВОБОДНАЯ ЗОНА
+// ============================================================
+//
+// Сейчас она специально не занята.
+// Это оставшиеся 25% ширины экрана:
+//
+//   x      = 240
+//   y      = 0
+//   width  = 80
+//   height = 240
+//
+// Позже сюда можно поставить статус, индикаторы, шкалу микрофона,
+// батарею, Wi-Fi, USB-режим или маленькую панель телеметрии.
+static const int RIGHT_FREE_X = 240;
+static const int RIGHT_FREE_Y = 0;
+static const int RIGHT_FREE_W = 80;
+static const int RIGHT_FREE_H = 240;
+
+
+static const int FOOTER_TEXT_X = 8;
+static const int FOOTER_TEXT_Y = 12;
+static const int FOOTER_TEXT_SIZE = 2;
+
+static const uint16_t COLOR_FOOTER_BG = COLOR_HEADER_BG;
+static const uint16_t COLOR_FOOTER_TEXT = ILI9341_WHITE;
+
+static const char FOOTER_TEXT[] = "FOOTER";
+
+
+// ============================================================
+// ОБЪЕКТ TFT
+// ============================================================
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(
   TFT_CS,
@@ -63,184 +151,125 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(
   TFT_RST
 );
 
-uint32_t frameCounter = 0;
-uint32_t lastFrameMs = 0;
+// ============================================================
+// SERIAL В ДВА КАНАЛА
+// ============================================================
 
-int sweepAngle = 0;
-bool eventBlink = false;
-
-void drawHeader() {
-  tft.fillRect(0, 0, 320, 34, ILI9341_NAVY);
-
-  tft.setTextColor(ILI9341_WHITE, ILI9341_NAVY);
-  tft.setTextSize(2);
-  tft.setCursor(8, 8);
-  tft.print("ESP32-S3 RADAR");
+void printBoth(const String &line) {
+  Serial.println(line);
+  Serial0.println(line);
 }
 
-void drawPinPanel() {
-  tft.fillRect(0, 36, 320, 78, ILI9341_BLACK);
-  tft.drawRect(2, 38, 316, 74, ILI9341_DARKGREY);
+// ============================================================
+// РИСОВАНИЕ
+// ============================================================
 
-  tft.setTextSize(1);
+void drawHeaderBlock() {
+  // Голубой прямоугольник заголовка.
+  tft.fillRect(
+    HEADER_X,
+    HEADER_Y,
+    HEADER_W,
+    HEADER_H,
+    COLOR_HEADER_BG
+  );
 
-  tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
-  tft.setCursor(8, 44);
-  tft.print("TFT SPI:");
-
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setCursor(8, 58);
-  tft.print("CS10 DC9 RST8 MOSI11 SCK12");
-
-  tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
-  tft.setCursor(8, 76);
-  tft.print("I2S MIC FUTURE:");
-
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setCursor(8, 90);
-  tft.print("BCLK4 WS5 DATA6");
+  // Белый текст внутри заголовка.
+  tft.setTextSize(HEADER_TEXT_SIZE);
+  tft.setTextColor(COLOR_HEADER_TEXT, COLOR_HEADER_BG);
+  tft.setCursor(HEADER_X + HEADER_TEXT_X, HEADER_Y + HEADER_TEXT_Y);
+  tft.print(HEADER_TEXT);
 }
 
-void drawRadarBase() {
-  const int cx = 160;
-  const int cy = 190;
+void drawRadarBlock() {
+  // Чёрный прямоугольник блока RADAR.
+  tft.fillRect(
+    RADAR_X,
+    RADAR_Y,
+    RADAR_W,
+    RADAR_H,
+    COLOR_RADAR_BG
+  );
 
-  tft.fillRect(0, 116, 320, 124, ILI9341_BLACK);
+  // Тонкая рамка, чтобы видеть границы блока.
+  tft.drawRect(
+    RADAR_X,
+    RADAR_Y,
+    RADAR_W,
+    RADAR_H,
+    COLOR_RADAR_BORDER
+  );
 
-  tft.drawCircle(cx, cy, 20, ILI9341_DARKGREEN);
-  tft.drawCircle(cx, cy, 45, ILI9341_DARKGREEN);
-  tft.drawCircle(cx, cy, 70, ILI9341_DARKGREEN);
-  tft.drawCircle(cx, cy, 95, ILI9341_DARKGREEN);
-
-  tft.drawLine(cx - 110, cy, cx + 110, cy, ILI9341_DARKGREEN);
-  tft.drawLine(cx, cy - 105, cx, cy + 45, ILI9341_DARKGREEN);
+  // Белая подпись RADAR в левом верхнем углу блока.
+  tft.setTextSize(RADAR_TEXT_SIZE);
+  tft.setTextColor(COLOR_RADAR_TEXT, COLOR_RADAR_BG);
+  tft.setCursor(RADAR_X + RADAR_TEXT_X, RADAR_Y + RADAR_TEXT_Y);
+  tft.print(RADAR_TEXT);
 }
 
-void drawSweep() {
-  const int cx = 160;
-  const int cy = 190;
-  const int r = 95;
 
-  float a = sweepAngle * DEG_TO_RAD;
+void drawFooterBlock() {
+  // Нижний блок FOOTER.
+  tft.fillRect(
+    FOOTER_X,
+    FOOTER_Y,
+    FOOTER_W,
+    FOOTER_H,
+    COLOR_FOOTER_BG
+  );
 
-  int x = cx + cos(a) * r;
-  int y = cy + sin(a) * r;
-
-  tft.drawLine(cx, cy, x, y, ILI9341_GREEN);
-
-  int bx1 = cx + cos((sweepAngle + 35) * DEG_TO_RAD) * 55;
-  int by1 = cy + sin((sweepAngle + 35) * DEG_TO_RAD) * 55;
-
-  int bx2 = cx + cos((sweepAngle + 130) * DEG_TO_RAD) * 78;
-  int by2 = cy + sin((sweepAngle + 130) * DEG_TO_RAD) * 78;
-
-  tft.fillCircle(bx1, by1, 4, eventBlink ? ILI9341_RED : ILI9341_YELLOW);
-  tft.fillCircle(bx2, by2, 3, ILI9341_CYAN);
+  tft.setTextSize(FOOTER_TEXT_SIZE);
+  tft.setTextColor(COLOR_FOOTER_TEXT, COLOR_FOOTER_BG);
+  tft.setCursor(FOOTER_X + FOOTER_TEXT_X, FOOTER_Y + FOOTER_TEXT_Y);
+  tft.print(FOOTER_TEXT);
 }
 
-void drawStatus() {
-  tft.fillRect(0, 244, 320, 76, ILI9341_BLACK);
-  tft.drawRect(2, 246, 316, 70, ILI9341_DARKGREY);
 
-  tft.setTextSize(1);
+void drawScreen() {
+  // Полностью очищаем экран перед рисованием.
+  tft.fillScreen(COLOR_SCREEN_BG);
 
-  tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
-  tft.setCursor(8, 254);
-  tft.print("EVENT:");
+  // Блок 1: заголовок.
+  drawHeaderBlock();
 
-  tft.setTextColor(eventBlink ? ILI9341_RED : ILI9341_GREEN, ILI9341_BLACK);
-  tft.setCursor(60, 254);
+  // Блок 2: область радара.
+  drawRadarBlock();
 
-  if (eventBlink) {
-    tft.print("SIGNAL DETECTED");
-  } else {
-    tft.print("SCAN");
-  }
-
-  tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
-  tft.setCursor(8, 272);
-  tft.print("FRAME:");
-
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setCursor(60, 272);
-  tft.print(frameCounter);
-
-  tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
-  tft.setCursor(8, 290);
-  tft.print("NEXT:");
-
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setCursor(60, 290);
-  tft.print("I2S digital microphones");
+  // Блок 3: нижний footer.
+  drawFooterBlock();
 }
 
-void drawBootScreen() {
-  tft.fillScreen(ILI9341_BLACK);
-
-  tft.setTextSize(2);
-  tft.setTextColor(ILI9341_GREEN, ILI9341_BLACK);
-  tft.setCursor(35, 70);
-  tft.print("RADAR DISPLAY");
-
-  tft.setTextSize(1);
-  tft.setTextColor(ILI9341_CYAN, ILI9341_BLACK);
-  tft.setCursor(48, 110);
-  tft.print("ESP32-S3 N16R8 + TFT 2.8");
-
-  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
-  tft.setCursor(78, 140);
-  tft.print("starting demo...");
-
-  delay(1200);
-}
+// ============================================================
+// SETUP
+// ============================================================
 
 void setup() {
   Serial.begin(115200);
+  Serial0.begin(115200);
 
-  // Ждём подключения USB Serial.
-  // На ESP32-S3 без этого первые сообщения часто улетают в пустоту,
-  // а потом мы смотрим в терминал как в бездну.
-  unsigned long serialStartMs = millis();
-  while (!Serial && (millis() - serialStartMs < 3000)) {
-    delay(10);
-  }
+  delay(1200);
 
-  delay(500);
-
-  Serial.println();
-  Serial.println("# ESP32-S3 TFT Radar Demo");
-  Serial.println("# TFT pins:");
-  Serial.println("# CS=10 DC=9 RST=8 MOSI=11 SCK=12");
-  Serial.println("# Future I2S:");
-  Serial.println("# BCLK=4 WS=5 DATA=6");
+  printBoth("");
+  printBoth("# SIMONG RADAR 2026");
+  printBoth("# Block 1: header");
+  printBoth("# Upload USB2 / Monitor USB1");
 
   tft.begin();
-  tft.setRotation(1);
+  tft.setRotation(TFT_ROTATION);
 
-  drawBootScreen();
-  drawHeader();
-  drawPinPanel();
-  drawRadarBase();
-  drawStatus();
+  printBoth(String("# rotation=") + String(TFT_ROTATION));
+  printBoth(String("# screen=") + String(tft.width()) + "x" + String(tft.height()));
+
+  drawScreen();
+
+  printBoth("# block 1 drawn");
 }
 
+// ============================================================
+// LOOP
+// ============================================================
+
 void loop() {
-  uint32_t now = millis();
-
-  if (now - lastFrameMs >= 90) {
-    lastFrameMs = now;
-    frameCounter++;
-
-    sweepAngle += 8;
-
-    if (sweepAngle >= 360) {
-      sweepAngle = 0;
-    }
-
-    eventBlink = ((frameCounter / 10) % 2) == 0;
-
-    drawRadarBase();
-    drawSweep();
-    drawStatus();
-  }
+  // Пока ничего не обновляем.
+  // Экран статический: проверяем первый блок.
 }
