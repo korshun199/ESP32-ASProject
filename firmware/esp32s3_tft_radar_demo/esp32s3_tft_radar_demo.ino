@@ -1,34 +1,34 @@
 /*
   SIMONG RADAR 2026
-  Экран ESP32-S3 + TFT
+  ESP32-S3 + TFT
 
-  Этап:
-    Блок 1. Заголовок.
+  Чистая базовая разметка экрана.
 
-  Координатная система, как смотрит Олежка:
+  Координаты:
     X=0, Y=0 — левый верхний угол.
     X растёт вправо.
     Y растёт вниз.
     Экран смотрим альбомно.
 
-  Блок 1:
-    x      = 0
-    y      = 0
-    width  = 240
-    height = 40
-    фон    = голубой
-    текст  = белый
-    текст  = SIMONG RADAR 2026
+  Экран:
+    общая рабочая логика: 320 x 240
 
-  Подключение TFT:
-    VCC    -> 3V3
-    GND    -> GND
-    CS     -> GPIO10
-    RESET  -> GPIO8
-    DC     -> GPIO9
-    SDI    -> GPIO11
-    SDK    -> GPIO12
-    LED    -> 3V3
+  Левая зона:
+    x = 0
+    y = 0
+    w = 240
+    h = 240
+
+  Правая зона:
+    x = 240
+    y = 0
+    w = 80
+    h = 240
+
+  Блоки слева:
+    HEADER: x=0, y=0,   w=240, h=40
+    RADAR:  x=0, y=40,  w=240, h=160
+    FOOTER: x=0, y=200, w=240, h=40
 
   USB:
     Прошивка: второй USB
@@ -51,11 +51,9 @@
 #define TFT_SCLK  12
 
 // ============================================================
-// НАСТРОЙКА ОРИЕНТАЦИИ
+// ОРИЕНТАЦИЯ
 // ============================================================
 
-// По результату ручной проверки нормальная базовая ориентация была ROT 0.
-// Пока оставляем её. Если физически надо будет повернуть, поменяем только тут.
 static const uint8_t TFT_ROTATION = 0;
 
 // ============================================================
@@ -63,16 +61,48 @@ static const uint8_t TFT_ROTATION = 0;
 // ============================================================
 
 static const uint16_t COLOR_SCREEN_BG    = ILI9341_BLACK;
-static const uint16_t COLOR_HEADER_BG    = ILI9341_BLUE;
+
+static const uint16_t COLOR_HEADER_BG    = ILI9341_RED;
 static const uint16_t COLOR_HEADER_TEXT  = ILI9341_WHITE;
 
+static const uint16_t COLOR_RADAR_BG     = ILI9341_BLACK;
+static const uint16_t COLOR_RADAR_BORDER = ILI9341_DARKGREY;
+static const uint16_t COLOR_RADAR_TEXT   = ILI9341_WHITE;
+
+static const uint16_t COLOR_FOOTER_BG    = ILI9341_RED;
+static const uint16_t COLOR_FOOTER_TEXT  = ILI9341_WHITE;
+
+static const uint16_t COLOR_RIGHT_BG     = ILI9341_BLACK;
+static const uint16_t COLOR_RIGHT_BORDER = ILI9341_DARKGREY;
+static const uint16_t COLOR_RIGHT_TEXT   = ILI9341_WHITE;
+static const uint16_t COLOR_RIGHT_VALUE  = ILI9341_GREEN;
+
 // ============================================================
-// БЛОК 1. ЗАГОЛОВОК
+// ГЕОМЕТРИЯ ЭКРАНА
 // ============================================================
 
-static const int HEADER_X = 0;
+static const int SCREEN_W = 320;
+static const int SCREEN_H = 240;
+
+// Левая рабочая колонка.
+static const int LEFT_X = 0;
+static const int LEFT_Y = 0;
+static const int LEFT_W = 240;
+static const int LEFT_H = 240;
+
+// Правая служебная колонка.
+static const int RIGHT_X = 240;
+static const int RIGHT_Y = 0;
+static const int RIGHT_W = 80;
+static const int RIGHT_H = 240;
+
+// ============================================================
+// БЛОК 1. HEADER
+// ============================================================
+
+static const int HEADER_X = LEFT_X;
 static const int HEADER_Y = 0;
-static const int HEADER_W = 240;
+static const int HEADER_W = LEFT_W;
 static const int HEADER_H = 40;
 
 static const int HEADER_TEXT_X = 8;
@@ -85,18 +115,14 @@ static const char HEADER_TEXT[] = "SIMONG RADAR 2026";
 // БЛОК 2. RADAR
 // ============================================================
 
-static const int RADAR_X = 0;
+static const int RADAR_X = LEFT_X;
 static const int RADAR_Y = HEADER_Y + HEADER_H;
-static const int RADAR_W = 240;
+static const int RADAR_W = LEFT_W;
 static const int RADAR_H = 160;
 
 static const int RADAR_TEXT_X = 8;
 static const int RADAR_TEXT_Y = 8;
 static const int RADAR_TEXT_SIZE = 2;
-
-static const uint16_t COLOR_RADAR_BG = ILI9341_BLACK;
-static const uint16_t COLOR_RADAR_BORDER = ILI9341_DARKGREY;
-static const uint16_t COLOR_RADAR_TEXT = ILI9341_WHITE;
 
 static const char RADAR_TEXT[] = "RADAR";
 
@@ -104,40 +130,25 @@ static const char RADAR_TEXT[] = "RADAR";
 // БЛОК 3. FOOTER
 // ============================================================
 
-static const int FOOTER_X = 0;
+static const int FOOTER_X = LEFT_X;
 static const int FOOTER_Y = RADAR_Y + RADAR_H;
-static const int FOOTER_W = 240;
+static const int FOOTER_W = LEFT_W;
 static const int FOOTER_H = 40;
-
-// ============================================================
-// ПРАВАЯ СВОБОДНАЯ ЗОНА
-// ============================================================
-//
-// Сейчас она специально не занята.
-// Это оставшиеся 25% ширины экрана:
-//
-//   x      = 240
-//   y      = 0
-//   width  = 80
-//   height = 240
-//
-// Позже сюда можно поставить статус, индикаторы, шкалу микрофона,
-// батарею, Wi-Fi, USB-режим или маленькую панель телеметрии.
-static const int RIGHT_FREE_X = 240;
-static const int RIGHT_FREE_Y = 0;
-static const int RIGHT_FREE_W = 80;
-static const int RIGHT_FREE_H = 240;
-
 
 static const int FOOTER_TEXT_X = 8;
 static const int FOOTER_TEXT_Y = 12;
 static const int FOOTER_TEXT_SIZE = 2;
 
-static const uint16_t COLOR_FOOTER_BG = COLOR_HEADER_BG;
-static const uint16_t COLOR_FOOTER_TEXT = ILI9341_WHITE;
-
 static const char FOOTER_TEXT[] = "FOOTER";
 
+// ============================================================
+// БЛОК 4. RIGHT PANEL
+// ============================================================
+
+static const int RIGHT_PANEL_X = RIGHT_X;
+static const int RIGHT_PANEL_Y = RIGHT_Y;
+static const int RIGHT_PANEL_W = RIGHT_W;
+static const int RIGHT_PANEL_H = RIGHT_H;
 
 // ============================================================
 // ОБЪЕКТ TFT
@@ -152,7 +163,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(
 );
 
 // ============================================================
-// SERIAL В ДВА КАНАЛА
+// SERIAL
 // ============================================================
 
 void printBoth(const String &line) {
@@ -161,11 +172,10 @@ void printBoth(const String &line) {
 }
 
 // ============================================================
-// РИСОВАНИЕ
+// РИСОВАНИЕ БЛОКОВ
 // ============================================================
 
 void drawHeaderBlock() {
-  // Голубой прямоугольник заголовка.
   tft.fillRect(
     HEADER_X,
     HEADER_Y,
@@ -174,7 +184,6 @@ void drawHeaderBlock() {
     COLOR_HEADER_BG
   );
 
-  // Белый текст внутри заголовка.
   tft.setTextSize(HEADER_TEXT_SIZE);
   tft.setTextColor(COLOR_HEADER_TEXT, COLOR_HEADER_BG);
   tft.setCursor(HEADER_X + HEADER_TEXT_X, HEADER_Y + HEADER_TEXT_Y);
@@ -182,7 +191,6 @@ void drawHeaderBlock() {
 }
 
 void drawRadarBlock() {
-  // Чёрный прямоугольник блока RADAR.
   tft.fillRect(
     RADAR_X,
     RADAR_Y,
@@ -191,7 +199,6 @@ void drawRadarBlock() {
     COLOR_RADAR_BG
   );
 
-  // Тонкая рамка, чтобы видеть границы блока.
   tft.drawRect(
     RADAR_X,
     RADAR_Y,
@@ -200,16 +207,13 @@ void drawRadarBlock() {
     COLOR_RADAR_BORDER
   );
 
-  // Белая подпись RADAR в левом верхнем углу блока.
   tft.setTextSize(RADAR_TEXT_SIZE);
   tft.setTextColor(COLOR_RADAR_TEXT, COLOR_RADAR_BG);
   tft.setCursor(RADAR_X + RADAR_TEXT_X, RADAR_Y + RADAR_TEXT_Y);
   tft.print(RADAR_TEXT);
 }
 
-
 void drawFooterBlock() {
-  // Нижний блок FOOTER.
   tft.fillRect(
     FOOTER_X,
     FOOTER_Y,
@@ -224,19 +228,93 @@ void drawFooterBlock() {
   tft.print(FOOTER_TEXT);
 }
 
+void drawRightPanelBlock() {
+  tft.fillRect(
+    RIGHT_PANEL_X,
+    RIGHT_PANEL_Y,
+    RIGHT_PANEL_W,
+    RIGHT_PANEL_H,
+    COLOR_RIGHT_BG
+  );
+
+  tft.drawRect(
+    RIGHT_PANEL_X,
+    RIGHT_PANEL_Y,
+    RIGHT_PANEL_W,
+    RIGHT_PANEL_H,
+    COLOR_RIGHT_BORDER
+  );
+
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_RIGHT_TEXT, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 12, RIGHT_PANEL_Y + 30);
+  tft.print("SYS");
+
+  tft.drawLine(
+    RIGHT_PANEL_X + 4,
+    RIGHT_PANEL_Y + 40,
+    RIGHT_PANEL_X + RIGHT_PANEL_W - 5,
+    RIGHT_PANEL_Y + 40,
+    COLOR_RIGHT_BORDER
+  );
+
+  tft.setTextSize(1);
+
+  int y = RIGHT_PANEL_Y + 57;
+
+  tft.setTextColor(COLOR_RIGHT_TEXT, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 8, y);
+  tft.print("MIC");
+  tft.setTextColor(COLOR_RIGHT_VALUE, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 42, y);
+  tft.print("WAIT");
+
+  y += 38;
+
+  tft.setTextColor(COLOR_RIGHT_TEXT, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 8, y);
+  tft.print("WIFI");
+  tft.setTextColor(COLOR_RIGHT_VALUE, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 42, y);
+  tft.print("OFF");
+
+  y += 38;
+
+  tft.setTextColor(COLOR_RIGHT_TEXT, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 8, y);
+  tft.print("FPS");
+  tft.setTextColor(COLOR_RIGHT_VALUE, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 42, y);
+  tft.print("--");
+
+  y += 38;
+
+  tft.setTextColor(COLOR_RIGHT_TEXT, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 8, y);
+  tft.print("USB");
+  tft.setTextColor(COLOR_RIGHT_VALUE, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 42, y);
+  tft.print("OK");
+
+  tft.setTextColor(COLOR_RIGHT_TEXT, COLOR_RIGHT_BG);
+  tft.setCursor(RIGHT_PANEL_X + 8, RIGHT_PANEL_Y + RIGHT_PANEL_H - 18);
+  tft.print("S3");
+}
+
+// ============================================================
+// ПОЛНАЯ ОТРИСОВКА ЭКРАНА
+// ============================================================
 
 void drawScreen() {
-  // Полностью очищаем экран перед рисованием.
+  // Сначала полностью стираем экран.
+  // Это важно: никаких старых слоёв, никаких наложений.
   tft.fillScreen(COLOR_SCREEN_BG);
 
-  // Блок 1: заголовок.
+  // Потом рисуем каждый блок ровно один раз.
   drawHeaderBlock();
-
-  // Блок 2: область радара.
-  drawRadarBlock();
-
-  // Блок 3: нижний footer.
+  //drawRadarBlock();
   drawFooterBlock();
+  drawRightPanelBlock();
 }
 
 // ============================================================
@@ -251,7 +329,7 @@ void setup() {
 
   printBoth("");
   printBoth("# SIMONG RADAR 2026");
-  printBoth("# Block 1: header");
+  printBoth("# Clean block layout");
   printBoth("# Upload USB2 / Monitor USB1");
 
   tft.begin();
@@ -262,7 +340,7 @@ void setup() {
 
   drawScreen();
 
-  printBoth("# block 1 drawn");
+  printBoth("# screen drawn");
 }
 
 // ============================================================
@@ -270,6 +348,6 @@ void setup() {
 // ============================================================
 
 void loop() {
-  // Пока ничего не обновляем.
-  // Экран статический: проверяем первый блок.
+  // Пока экран статический.
+  
 }
