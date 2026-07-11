@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""
+ESP32 Radar: запись трёх периодов опыта в /tmp/000.log.
+
+Скрипт НЕ анализирует сигнал.
+
+Делает только:
+- спрашивает время, частоту и громкость для трёх периодов;
+- пишет заголовок блока <<время,частота,громкость>>;
+- читает serial-порт /dev/ttyACM0 указанное число секунд;
+- сохраняет поток ESP32 в /tmp/000.log.
+
+Важно:
+arduino-cli monitor здесь НЕ используется.
+Он плохо жил в фоне, как маленький демон бюрократии.
+"""
+
+import fcntl
+import os
+import select
+import subprocess
+import sys
+import termios
+import time
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------
+# НАСТРОЙКИ ПРОЕКТА
+# ---------------------------------------------------------------------
+
+# PORT — serial-порт ESP32-S3.
+PORT = "/dev/ttyACM0"
+
+# BAUD — скорость serial-порта.
+BAUD = 115200
+
+# OUT_FILE — файл, куда пишем весь опыт.
+OUT_FILE = Path("/tmp/000.log")
+
+# PERIODS_COUNT — сколько периодов записывать.
+PERIODS_COUNT = 3
+
+
+# ---------------------------------------------------------------------
+# ЦВЕТА ТЕРМИНАЛА
+# ---------------------------------------------------------------------
+
+USE_COLOR = sys.stdout.isatty()
+
+RESET = "\033[0m" if USE_COLOR else ""
+BOLD = "\033[1m" if USE_COLOR else ""
+GREEN = "\033[32m" if USE_COLOR else ""
+YELLOW = "\033[33m" if USE_COLOR else ""
+CYAN = "\033[36m" if USE_COLOR else ""
+RED = "\033[31m" if USE_COLOR else ""
+DIM = "\033[2m" if USE_COLOR else ""
+
+
+def c(text, color):
+    """Вернуть цветной текст."""
+    return f"{color}{text}{RESET}"
+
+
+def title(text):
+    """Напечатать заголовок."""
+    print()
+    print(c("=" * 60, GREEN))
+    print(c(text, BOLD + GREEN))
+    print(c("=" * 60, GREEN))
+
+
+def ask_int(prompt):
+    """
+    Спросить у пользователя целое число.
+
+    prompt:
+        текст вопроса.
+
+    Возвращает:
+        int.
+    """
+    while True:
+        value = input(c(prompt + " ", CYAN)).strip()
+
+        try:
+            return int(value)
+        except ValueError:
+            print(c("Ошибка: нужно целое число.", RED))
+
+
+def run_stty(port, baud):
+    """
+    Настроить serial-порт через stty.
+
+    port:
+        путь к порту, например /dev/ttyACM0.
+
+    baud:
+        скорость, например 115200.
+    """
+    subprocess.run(
+        [
+            "stty",
+            "-F",
+            port,
+            str(baud),
+            "raw",
+            "-echo",
+            "-echoe",
+            "-echok",
+            "-echoctl",
+            "-echoke",
+        ],
+        check=False,
+    )
+
+
+def clear_dtr_rts(fd):
+    """
+    Отключить DTR и RTS на serial-порту.
+
+    fd:
+        файловый дескриптор открытого serial-порта.
+
+    Это нужно для ESP32-S3, потому что DTR/RTS могут мешать
+    нормальному выводу прошивки.
+    """
+    TIOCM_DTR = 0x002
+    TIOCM_RTS = 0x004
+    TIOCMBIC = getattr(termios, "TIOCMBIC", 0x5417)
+
+    mask = TIOCM_DTR | TIOCM_RTS
+
+    try:
+        fcntl.ioctl(fd, TIOCMBIC, mask.to_bytes(4, byteorder=sys.byteorder))
+    except OSError:
+        pass
+
+
+def read_serial_for_seconds(seconds, out_file):
+    """
+    Читать serial-порт заданное число секунд и писать в файл.
+
+    seconds:
+        сколько секунд читать.
+
+    out_file:
+        открытый файл /tmp/000.log.
+
+    Возвращает:
+        количество найденных строк FRAME= за этот период.
+    """
+    frame_count = 0
+    buffer = b""
+    end_time = time.monotonic() + seconds
+
+    run_stty(PORT, BAUD)
+
+    fd = os.open(PORT, os.O_RDONLY | os.O_NOCTTY | os.O_NONBLOCK)
+
+    try:
+        clear_dtr_rts(fd)
+
+        while time.monotonic() < end_time:
+            timeout = max(0.0, end_time - time.monotonic())
+            ready, _, _ = select.select([fd], [], [], min(0.2, timeout))
+
+            if not ready:
+                continue
+
+            try:
+                chunk = os.read(fd, 4096)
+            except BlockingIOError:
+                continue
+
+            if not chunk:
+                continue
+
+            buffer += chunk
+
+            while b"\n" in buffer:
+                raw_line, buffer = buffer.split(b"\n", 1)
+                line = raw_line.decode("utf-8", errors="replace")
+                out_file.write(line + "\n")
+
+                if "FRAME=" in line:
+                    frame_count += 1
+
+        if buffer:
+            line = buffer.decode("utf-8", errors="replace")
+            out_file.write(line)
+
+            if "FRAME=" in line:
+                frame_count += 1
+
+        out_file.flush()
+
+    finally:
+        os.close(fd)
+
+    return frame_count
+
+
+def record_period(period_number, out_file):
+    """
+    Записать один период опыта.
+
+    period_number:
+        номер периода: 1, 2 или 3.
+
+    out_file:
+        открытый файл /tmp/000.log.
+    """
+    title(f"НАСТРОЙКА ПЕРИОДА {period_number}")
+
+    seconds = ask_int("Время записи, сек:")
+    freq_hz = ask_int("Частота, Гц:")
+    volume_percent = ask_int("Громкость, %:")
+
+    title(f"ПЕРИОД {period_number}: {seconds} сек, {freq_hz} Гц, {volume_percent}%")
+
+    print(c("Подготовь генератор:", YELLOW))
+    print(f"  частота:   {freq_hz} Гц")
+    print(f"  громкость: {volume_percent}%")
+    print(f"  время:     {seconds} сек")
+    print()
+    input(c("Нажми Enter, когда всё готово.", DIM))
+
+    out_file.write("\n")
+    out_file.write(f"<<{seconds},{freq_hz},{volume_percent}>>\n")
+    out_file.flush()
+
+    print(c(f"Запись началась на {seconds} сек...", GREEN))
+
+    frame_count = read_serial_for_seconds(seconds, out_file)
+
+    out_file.write(f"\n--- PERIOD {period_number} END ---\n")
+    out_file.flush()
+
+    print(c(f"Запись периода {period_number} завершена.", GREEN))
+    print(c(f"FRAME за период: {frame_count}", YELLOW))
+
+
+def main():
+    """Главная функция."""
+    title("ESP32 Radar get_tone")
+
+    print("Этот скрипт запишет три периода в файл:")
+    print(f"  {OUT_FILE}")
+    print()
+    print("Формат блока:")
+    print("  <<время,частота,громкость>>")
+    print()
+    print(c(f"Старый файл {OUT_FILE} будет перезаписан.", YELLOW))
+    print()
+
+    answer = input(c("Начать запись? y/n: ", CYAN)).strip().lower()
+
+    if answer != "y":
+        print("Отмена.")
+        return
+
+    with OUT_FILE.open("w", encoding="utf-8", errors="replace") as out_file:
+        out_file.write("# ESP32 Radar tone record\n")
+        out_file.write(f"# created: {time.strftime('%Y-%m-%d %H:%M:%S %z')}\n")
+        out_file.write(f"# port: {PORT}\n")
+        out_file.write(f"# baud: {BAUD}\n")
+        out_file.write("# dtr: off\n")
+        out_file.write("# rts: off\n")
+        out_file.flush()
+
+        for period_number in range(1, PERIODS_COUNT + 1):
+            record_period(period_number, out_file)
+
+    title("ГОТОВО")
+
+    text = OUT_FILE.read_text(encoding="utf-8", errors="replace")
+    total_frames = text.count("FRAME=")
+
+    print("Файл записан:")
+    print(f"  {OUT_FILE}")
+    print()
+    print(c(f"Всего FRAME в файле: {total_frames}", YELLOW))
+    print()
+    print("Проверить массивы:")
+    print("  ./scripts/analise_tone /tmp/000.log --max-frames 3")
+
+
+if __name__ == "__main__":
+    main()

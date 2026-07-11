@@ -1,0 +1,400 @@
+#!/usr/bin/env python3
+"""
+ESP32 Radar: создание массивов данных из файла опыта.
+
+Назначение:
+- прочитать файл опыта;
+- найти блоки вида <<время, частота, громкость>>;
+- создать массив данных для каждого блока;
+- положить FRAME-кадры внутрь нужного массива;
+- привязать WAVE_K к последнему FRAME;
+- вывести массивы на экран с цветными подписями.
+
+Важно:
+этот файл НЕ анализирует сигнал;
+этот файл НЕ делает выводы;
+этот файл НЕ подбирает пороги.
+"""
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+
+# Цвет включается только в обычном терминале.
+# Если вывод перенаправить в файл, цветовые коды не печатаются.
+USE_COLOR = sys.stdout.isatty()
+
+
+# ANSI-коды цветов.
+# Нужны только для удобного чтения вывода глазами.
+RESET = "\033[0m" if USE_COLOR else ""
+BOLD = "\033[1m" if USE_COLOR else ""
+DIM = "\033[2m" if USE_COLOR else ""
+
+RED = "\033[31m" if USE_COLOR else ""
+GREEN = "\033[32m" if USE_COLOR else ""
+YELLOW = "\033[33m" if USE_COLOR else ""
+BLUE = "\033[34m" if USE_COLOR else ""
+CYAN = "\033[36m" if USE_COLOR else ""
+MAGENTA = "\033[35m" if USE_COLOR else ""
+
+
+# HEADER_RE ищет заголовок блока опыта.
+#
+# Формат:
+#   <<время,частота,громкость>>
+#
+# Пример:
+#   <<0,0,30>>
+#
+# Переменные:
+#   time_value      первое число заголовка;
+#   freq_hz         частота записи;
+#   volume_percent  громкость записи.
+HEADER_RE = re.compile(
+    r"<<\s*"
+    r"(?P<time_value>-?\d+)\s*,\s*"
+    r"(?P<freq_hz>-?\d+)\s*,\s*"
+    r"(?P<volume_percent>-?\d+)\s*"
+    r">>"
+)
+
+
+# FRAME_RE ищет одну строку FRAME.
+#
+# В реальном serial-логе перед FRAME может быть мусор:
+#   ,27,27,23,2FRAME=4802 count=512 ...
+#
+# Поэтому FRAME ищется в любом месте строки.
+#
+# Переменные FRAME:
+#   frame   номер кадра ESP32;
+#   count   количество сэмплов;
+#   mean    среднее значение сигнала;
+#   level   условная громкость;
+#   p2p     размах max-min;
+#   zc      грубая частота по пересечениям нуля;
+#   f400    энергия частоты 400 Гц;
+#   f1000   энергия частоты 1000 Гц;
+#   tone    решение прошивки: NONE / 400 / 1000.
+FRAME_RE = re.compile(
+    r"FRAME=(?P<frame>\d+)\s+"
+    r"count=(?P<count>\d+)\s+"
+    r"mean=(?P<mean>-?\d+)\s+"
+    r"level=(?P<level>-?\d+)\s+"
+    r"p2p=(?P<p2p>-?\d+)\s+"
+    r"zc=(?P<zc>-?\d+(?:\.\d+)?)\s+"
+    r"f400=(?P<f400>-?\d+(?:\.\d+)?)\s+"
+    r"f1000=(?P<f1000>-?\d+(?:\.\d+)?)\s+"
+    r"tone=(?P<tone>[A-Z0-9]+)"
+)
+
+
+# WAVE_RE ищет строку WAVE_K.
+#
+# WAVE_K — короткий кусок формы волны.
+# Сейчас не анализируется, только сохраняется.
+WAVE_RE = re.compile(
+    r"WAVE_K=(?P<wave>[-\d,\s]+)"
+)
+
+
+def color(text, ansi_color):
+    """Вернуть цветной текст."""
+    return f"{ansi_color}{text}{RESET}"
+
+
+def title(text):
+    """Напечатать крупный цветной заголовок."""
+    print()
+    print(color("=" * 72, GREEN))
+    print(color(text, BOLD + GREEN))
+    print(color("=" * 72, GREEN))
+
+
+def field(name, value, comment):
+    """
+    Напечатать переменную с пояснением.
+
+    name:
+        имя переменной.
+
+    value:
+        значение переменной.
+
+    comment:
+        короткое описание переменной.
+    """
+    print(
+        f"{color(name.ljust(16), CYAN)} = "
+        f"{color(str(value).ljust(14), YELLOW)} "
+        f"{color('| ' + comment, DIM)}"
+    )
+
+
+def create_buffer(header_match, line_no):
+    """
+    Создать новый массив данных по заголовку <<...>>.
+
+    header_line:
+        строка файла, где найден заголовок массива.
+
+    time_value:
+        первое число в заголовке.
+
+    freq_hz:
+        второе число в заголовке.
+
+    volume_percent:
+        третье число в заголовке.
+
+    frames:
+        список FRAME-кадров этого блока.
+    """
+    return {
+        "header_line": line_no,
+        "time_value": int(header_match.group("time_value")),
+        "freq_hz": int(header_match.group("freq_hz")),
+        "volume_percent": int(header_match.group("volume_percent")),
+        "frames": [],
+    }
+
+
+def parse_frame(line, line_no):
+    """Прочитать FRAME из строки или вернуть None."""
+    match = FRAME_RE.search(line)
+
+    if not match:
+        return None
+
+    return {
+        "line": line_no,
+        "frame": int(match.group("frame")),
+        "count": int(match.group("count")),
+        "mean": int(match.group("mean")),
+        "level": int(match.group("level")),
+        "p2p": int(match.group("p2p")),
+        "zc": float(match.group("zc")),
+        "f400": float(match.group("f400")),
+        "f1000": float(match.group("f1000")),
+        "tone": match.group("tone"),
+        "wave_k": [],
+    }
+
+
+def parse_wave(line):
+    """Прочитать WAVE_K из строки или вернуть None."""
+    match = WAVE_RE.search(line)
+
+    if not match:
+        return None
+
+    wave_text = match.group("wave")
+    values = []
+
+    for item in wave_text.split(","):
+        item = item.strip()
+
+        if item == "":
+            continue
+
+        try:
+            values.append(int(item))
+        except ValueError:
+            continue
+
+    return values
+
+
+def read_buffers(path):
+    """
+    Прочитать файл и создать массивы данных.
+
+    buffers:
+        главный список массивов.
+
+    current_buffer:
+        массив, в который сейчас складываются FRAME.
+
+    last_frame:
+        последний найденный FRAME.
+        Нужен, чтобы WAVE_K прикрепить к нему.
+    """
+    buffers = []
+    current_buffer = None
+    last_frame = None
+
+    with path.open("r", encoding="utf-8", errors="replace") as file:
+        for line_no, line in enumerate(file, start=1):
+            header_match = HEADER_RE.search(line)
+
+            if header_match:
+                current_buffer = create_buffer(header_match, line_no)
+                buffers.append(current_buffer)
+                last_frame = None
+                continue
+
+            frame = parse_frame(line, line_no)
+
+            if frame and current_buffer is not None:
+                current_buffer["frames"].append(frame)
+                last_frame = frame
+                continue
+
+            wave = parse_wave(line)
+
+            if wave is not None and last_frame is not None:
+                last_frame["wave_k"] = wave
+
+    return buffers
+
+
+def tone_color(tone):
+    """Цвет для значения tone."""
+    if tone == "NONE":
+        return BLUE
+    if tone == "400":
+        return GREEN
+    if tone == "1000":
+        return MAGENTA
+    return YELLOW
+
+
+def print_frame(frame, frame_index):
+    """Вывести один FRAME-кадр с подписями переменных."""
+    print(color(f"  Кадр массива #{frame_index}", BOLD + BLUE))
+
+    #field("line", frame["line"], "номер строки в исходном файле")
+    field("frame", frame["frame"], "номер FRAME, который напечатала ESP32")
+    field("count", frame["count"], "количество сэмплов в кадре")
+    field("mean", frame["mean"], "среднее значение сигнала")
+    field("level", frame["level"], "уровень громкости")
+    field("p2p", frame["p2p"], "размах сигнала max-min")
+    field("zc", frame["zc"], "грубая частота по пересечениям нуля")
+    field("f400", frame["f400"], "энергия частоты 400 Гц")
+    field("f1000", frame["f1000"], "энергия частоты 1000 Гц")
+
+    print(
+        f"{color('tone'.ljust(16), CYAN)} = "
+        f"{color(str(frame['tone']).ljust(14), tone_color(frame['tone']))} "
+        f"{color('| решение прошивки: NONE / 400 / 1000', DIM)}"
+    )
+
+    field("wave_k_len", len(frame["wave_k"]), "сколько чисел в WAVE_K")
+
+    if frame["wave_k"]:
+        print(
+            f"{color('wave_k'.ljust(16), CYAN)} = "
+            f"{color(str(frame['wave_k']), YELLOW)} "
+            f"{color('| кусок формы волны', DIM)}"
+        )
+    else:
+        print(
+            f"{color('wave_k'.ljust(16), CYAN)} = "
+            f"{color('[]', RED)} "
+            f"{color('| WAVE_K не найден', DIM)}"
+        )
+
+    print(color("-" * 72, DIM))
+
+
+def print_buffer(buffer, array_id, max_frames):
+    """Вывести один массив данных с подписями переменных."""
+    frames = buffer["frames"]
+
+    title(f"МАССИВ ДАННЫХ #{array_id}")
+
+    field("header_line", buffer["header_line"], "строка, где найден заголовок <<...>>")
+    field("time_value", buffer["time_value"], "первое число заголовка: время/метка блока")
+    field("freq_hz", buffer["freq_hz"], "второе число заголовка: частота записи")
+    field("volume_percent", buffer["volume_percent"], "третье число заголовка: громкость записи")
+    field("frames_count", len(frames), "сколько FRAME-кадров попало в массив")
+
+    if not frames:
+        print()
+        print(color("Данные массива пустые: FRAME не найдены.", RED))
+        return
+
+    print()
+    print(color("Содержимое массива:", BOLD))
+    print()
+
+    if max_frames == 0:
+        frames_to_print = frames
+    else:
+        frames_to_print = frames[:max_frames]
+
+    for frame_index, frame in enumerate(frames_to_print, start=1):
+        print_frame(frame, frame_index)
+
+    if max_frames != 0 and len(frames) > max_frames:
+        hidden_frames = len(frames) - max_frames
+        print(color(f"... скрыто кадров: {hidden_frames}", DIM))
+        print(color("Чтобы показать все: --max-frames 0", DIM))
+
+
+def print_buffers(buffers, max_frames):
+    """Вывести все созданные массивы."""
+    title("ESP32 Radar: разбор файла на массивы")
+
+    print(color("Анализ сигнала НЕ выполняется.", BOLD + YELLOW))
+    print()
+    field("arrays_count", len(buffers), "сколько массивов найдено в файле")
+
+    if not buffers:
+        print()
+        print(color("Массивы не найдены.", RED))
+        print(color("Нужен заголовок вида: <<0,0,30>>", DIM))
+        return
+
+    for array_id, buffer in enumerate(buffers, start=1):
+        print_buffer(buffer, array_id, max_frames)
+
+
+def parse_args():
+    """
+    Прочитать аргументы командной строки.
+
+    logfile:
+        файл с блоками <<time,freq,volume>>.
+
+    --max-frames:
+        сколько FRAME печатать из каждого массива.
+        0 означает печатать все кадры.
+    """
+    parser = argparse.ArgumentParser(
+        description="Create labeled tone arrays from ESP32 Radar log."
+    )
+
+    parser.add_argument(
+        "logfile",
+        help="Файл с блоками <<time,freq,volume>>.",
+    )
+
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=15,
+        help="Сколько FRAME печатать из каждого массива. 0 = все.",
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    """Главная функция."""
+    args = parse_args()
+    log_path = Path(args.logfile).expanduser().resolve()
+
+    if not log_path.exists():
+        print(color(f"Файл не найден: {log_path}", RED))
+        raise SystemExit(1)
+
+    buffers = read_buffers(log_path)
+    print_buffers(buffers, args.max_frames)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""Одновременная запись лога ESP32 и WAV с микрофона компьютера."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import os
+from pathlib import Path
+import select
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import termios
+import time
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Одновременно записать serial-лог ESP32 и WAV-файл."
+    )
+    parser.add_argument("duration", type=float, help="длительность записи в секундах")
+    parser.add_argument("frequency", nargs="?", type=int, default=0, help="частота метки, Гц")
+    parser.add_argument("volume", nargs="?", type=int, default=0, help="громкость метки, %%")
+    parser.add_argument("--port", default="/dev/ttyACM0", help="serial-порт ESP32")
+    parser.add_argument("--baud", type=int, default=115200, help="скорость serial-порта")
+    parser.add_argument("--device", default="default", help="ALSA-устройство для arecord")
+    parser.add_argument("--rate", type=int, default=16000, help="частота WAV, Гц")
+    parser.add_argument("--channels", type=int, default=1, help="число каналов WAV")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="каталог результата; по умолчанию web/data внутри проекта",
+    )
+    return parser.parse_args()
+
+
+def configure_serial(port: str, baud: int) -> None:
+    subprocess.run(
+        [
+            "stty",
+            "-F",
+            port,
+            str(baud),
+            "raw",
+            "-echo",
+            "-hupcl",
+        ],
+        check=True,
+    )
+
+
+def clear_dtr_rts(fd: int) -> None:
+    tiocmbic = getattr(termios, "TIOCMBIC", 0x5417)
+    tiocm_dtr = getattr(termios, "TIOCM_DTR", 0x002)
+    tiocm_rts = getattr(termios, "TIOCM_RTS", 0x004)
+    mask = struct.pack("I", tiocm_dtr | tiocm_rts)
+    try:
+        fcntl.ioctl(fd, tiocmbic, mask)
+    except OSError:
+        pass
+
+
+def stop_process(process: subprocess.Popen[bytes] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=2)
+
+
+def main() -> int:
+    args = parse_args()
+
+    if args.duration <= 0:
+        print("Ошибка: длительность должна быть больше нуля.", file=sys.stderr)
+        return 2
+
+    if shutil.which("arecord") is None:
+        print("Ошибка: команда arecord не найдена. Установи пакет alsa-utils.", file=sys.stderr)
+        return 2
+
+    if not Path(args.port).exists():
+        print(f"Ошибка: порт {args.port} не найден.", file=sys.stderr)
+        return 2
+
+    project_root = Path(__file__).resolve().parents[1]
+    output_dir = args.output_dir or (project_root / "web" / "data")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = output_dir / "000.log"
+    wav_path = output_dir / "000.wav"
+
+    configure_serial(args.port, args.baud)
+
+    serial_fd = os.open(
+        args.port,
+        os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK,
+    )
+    clear_dtr_rts(serial_fd)
+
+    try:
+        termios.tcflush(serial_fd, termios.TCIFLUSH)
+    except termios.error:
+        pass
+
+    audio_process: subprocess.Popen[bytes] | None = None
+    interrupted = False
+    frame_count = 0
+    serial_buffer = b""
+
+    def handle_signal(_signum: int, _frame: object) -> None:
+        nonlocal interrupted
+        interrupted = True
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+    print()
+    print("ESP32 Radar: синхронная запись")
+    print(f"  время:    {args.duration:g} сек")
+    print(f"  метка:    {args.frequency} Гц, {args.volume}%")
+    print(f"  serial:   {args.port} @ {args.baud}")
+    print(f"  audio:    ALSA {args.device}, {args.rate} Гц, {args.channels} канал")
+    print(f"  LOG:      {log_path}")
+    print(f"  WAV:      {wav_path}")
+    print()
+    input("Нажми Enter для одновременного старта записи...")
+
+    try:
+        with log_path.open("w", encoding="utf-8", buffering=1) as log_file:
+            log_file.write("# ESP32 Radar synchronized record\n")
+            log_file.write(f"# created: {time.strftime('%Y-%m-%d %H:%M:%S %z')}\n")
+            log_file.write(f"# port: {args.port}\n")
+            log_file.write(f"# baud: {args.baud}\n")
+            log_file.write(f"# audio_file: {wav_path.name}\n")
+            log_file.write(f"# audio_rate: {args.rate}\n")
+            log_file.write(f"# audio_channels: {args.channels}\n")
+            log_file.write("# T_MS: milliseconds from the common software start\n")
+            log_file.write(f"\n<<{args.duration:g},{args.frequency},{args.volume}>>\n")
+
+            audio_command = [
+                "arecord",
+                "-q",
+                "-D",
+                args.device,
+                "-f",
+                "S16_LE",
+                "-r",
+                str(args.rate),
+                "-c",
+                str(args.channels),
+                "-t",
+                "wav",
+                str(wav_path),
+            ]
+
+            common_start = time.monotonic()
+            audio_process = subprocess.Popen(
+                audio_command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            end_time = common_start + args.duration
+
+            print("СТАРТ: LOG + WAV")
+
+            while not interrupted and time.monotonic() < end_time:
+                remaining = max(0.0, end_time - time.monotonic())
+                ready, _, _ = select.select([serial_fd], [], [], min(0.1, remaining))
+                if not ready:
+                    if audio_process.poll() not in (None, 0):
+                        break
+                    continue
+
+                try:
+                    chunk = os.read(serial_fd, 8192)
+                except BlockingIOError:
+                    continue
+
+                if not chunk:
+                    continue
+
+                serial_buffer += chunk
+
+                while b"\n" in serial_buffer:
+                    raw_line, serial_buffer = serial_buffer.split(b"\n", 1)
+                    line = raw_line.rstrip(b"\r").decode("utf-8", errors="replace")
+                    timestamp_ms = (time.monotonic() - common_start) * 1000.0
+                    log_file.write(f"T_MS={timestamp_ms:.3f} {line}\n")
+                    if "FRAME=" in line:
+                        frame_count += 1
+
+            if serial_buffer:
+                line = serial_buffer.decode("utf-8", errors="replace")
+                timestamp_ms = (time.monotonic() - common_start) * 1000.0
+                log_file.write(f"T_MS={timestamp_ms:.3f} {line}\n")
+                if "FRAME=" in line:
+                    frame_count += 1
+
+            log_file.write("\n--- PERIOD 1 END ---\n")
+
+        stop_process(audio_process)
+
+        if audio_process is not None and audio_process.returncode not in (0, -15, -9):
+            error_text = b""
+            if audio_process.stderr is not None:
+                error_text = audio_process.stderr.read()
+            print(
+                "arecord завершился с ошибкой:\n"
+                + error_text.decode("utf-8", errors="replace"),
+                file=sys.stderr,
+            )
+            return 1
+
+    finally:
+        stop_process(audio_process)
+        os.close(serial_fd)
+
+    print()
+    print("ГОТОВО")
+    print(f"  FRAME: {frame_count}")
+    print(f"  LOG:   {log_path}")
+    print(f"  WAV:   {wav_path}")
+    print()
+    print("Обнови веб-страницу и нажми «Загрузить data/000.*».")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
