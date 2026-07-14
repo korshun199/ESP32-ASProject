@@ -1,3 +1,25 @@
-
+# Записи звука и журналы анализа
 web/data/*.wav
 web/data/*.log
+
+# Виртуальное окружение Python
+web/.venv/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+
+# Временные файлы Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Локальные файлы веб-панели
+web/index.sha256
+
+# Системные файлы редакторов и ОС
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
