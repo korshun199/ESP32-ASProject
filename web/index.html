@@ -1,1031 +1,419 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ESP32 Radar — графики параметров</title>
-<style>
-:root {
-  color-scheme: dark;
-  --bg:#0b1020;
-  --panel:#121a2f;
-  --panel2:#18213a;
-  --border:#2a365c;
-  --text:#edf2ff;
-  --muted:#9aa7c7;
-  --accent:#6ee7b7;
-  --accent2:#67b7ff;
-  --warn:#fbbf24;
-  --danger:#fb7185;
-}
-*{box-sizing:border-box}
-body{
-  margin:0;
-  background:
-    radial-gradient(circle at top left,rgba(103,183,255,.13),transparent 32rem),
-    radial-gradient(circle at top right,rgba(110,231,183,.10),transparent 28rem),
-    var(--bg);
-  color:var(--text);
-  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-}
-main{width:min(1600px,calc(100% - 28px));margin:auto;padding:24px 0 40px}
-h1{margin:0 0 8px;font-size:clamp(1.6rem,3vw,2.6rem)}
-p{color:var(--muted);line-height:1.5}
-.panel{
-  background:linear-gradient(180deg,rgba(24,33,58,.96),rgba(18,26,47,.96));
-  border:1px solid var(--border);
-  border-radius:18px;
-  box-shadow:0 18px 45px rgba(0,0,0,.26);
-}
-.controls{
-  display:grid;
-  grid-template-columns:minmax(250px,1fr) minmax(220px,360px) auto;
-  gap:12px;
-  padding:16px;
-  margin:18px 0;
-  align-items:end;
-}
-label{display:block;margin-bottom:7px;color:var(--muted);font-size:.86rem}
-input,select,button{
-  width:100%;
-  min-height:42px;
-  border-radius:11px;
-  border:1px solid var(--border);
-  background:#0d1428;
-  color:var(--text);
-  font:inherit;
-  padding:9px 11px;
-}
-button{cursor:pointer;font-weight:700}
-button:hover{border-color:var(--accent2)}
-.status{min-height:24px;margin:0 0 14px;color:var(--muted)}
-.status.error{color:var(--danger)}
-.summary{
-  display:grid;
-  grid-template-columns:repeat(6,minmax(130px,1fr));
-  gap:12px;
-  margin-bottom:16px;
-}
-.stat{padding:15px;min-height:98px}
-.stat small{color:var(--muted)}
-.stat strong{display:block;margin-top:8px;font-size:1.55rem}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.card{padding:14px;min-width:0}
-.card h2{margin:0 0 4px;font-size:1rem}
-.card .help{color:var(--muted);font-size:.76rem;margin-bottom:8px}
-.canvas-wrap{height:285px;position:relative}
-canvas{width:100%;height:100%;display:block;border-radius:10px;background:rgba(8,13,26,.35)}
-.full{grid-column:1/-1}
-.wave-controls{display:grid;grid-template-columns:minmax(220px,380px) auto;gap:10px;align-items:end;margin-bottom:10px}
-.footer{margin-top:16px;padding:14px 16px;color:var(--muted)}
-code{color:var(--accent)}
-@media(max-width:1100px){
-  .summary{grid-template-columns:repeat(3,1fr)}
-  .controls{grid-template-columns:1fr 1fr}
-}
-@media(max-width:760px){
-  .controls,.summary,.grid,.wave-controls{grid-template-columns:1fr}
-  .full{grid-column:auto}
-  .canvas-wrap{height:240px}
-}
-
-.playback{
-  display:grid;
-  grid-template-columns:auto auto minmax(240px,1fr) minmax(130px,180px) minmax(110px,150px);
-  gap:12px;
-  align-items:end;
-  padding:16px;
-  margin:-2px 0 16px;
-}
-.playback .time-box{
-  min-height:42px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:8px 12px;
-  border:1px solid var(--border);
-  border-radius:11px;
-  background:#0d1428;
-  color:var(--warn);
-  font-variant-numeric:tabular-nums;
-  white-space:nowrap;
-}
-.playback input[type="range"]{
-  padding:0;
-  accent-color:var(--warn);
-}
-.playback button.playing{
-  border-color:var(--warn);
-  color:var(--warn);
-}
-@media(max-width:1100px){
-  .playback{grid-template-columns:1fr 1fr 2fr}
-}
-@media(max-width:760px){
-  .playback{grid-template-columns:1fr}
-}
-
-
-.audio-panel{
-  display:grid;
-  grid-template-columns:minmax(260px,1fr) minmax(260px,1fr) auto;
-  gap:12px;
-  align-items:end;
-  padding:16px;
-  margin:-2px 0 16px;
-}
-.audio-panel audio{
-  width:100%;
-  min-height:42px;
-}
-.audio-state{
-  color:var(--muted);
-  font-size:.82rem;
-  margin-top:6px;
-}
-@media(max-width:900px){
-  .audio-panel{grid-template-columns:1fr}
-}
-
-</style>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+  <meta
+    name="theme-color"
+    content="#08111f"
+  >
+  <title>ESP32 Audio Radar</title>
+  <link
+    rel="stylesheet"
+    href="/static/style.css"
+  >
 </head>
+
 <body>
-<main>
-  <h1>ESP32 Radar · графики FRAME</h1>
-  <p>Один локальный HTML без внешних библиотек и без CORS-цирка. Открывается прямо через <code>file://</code>.</p>
-
-  <section class="panel controls">
+  <header class="topbar">
     <div>
-      <label for="fileInput">Открыть другой лог</label>
-      <input id="fileInput" type="file" accept=".log,.txt,text/plain">
-    </div>
-    <div>
-      <label for="blockSelect">Период / массив</label>
-      <select id="blockSelect"></select>
-    </div>
-    <button id="embeddedButton">Вернуть встроенный лог</button>
-    <button id="loadPairButton">Загрузить data/000.*</button>
-  </section>
-
-  <section class="panel audio-panel">
-    <div>
-      <label for="audioInput">Открыть WAV-файл</label>
-      <input id="audioInput" type="file" accept=".wav,audio/wav,audio/*">
-      <div id="audioState" class="audio-state">WAV ещё не выбран</div>
+      <h1>ESP32 Audio Radar</h1>
+      <p>
+        Осциллограмма, спектр и история звука в реальном времени
+      </p>
     </div>
 
-    <div>
-      <label>Воспроизведение звука</label>
-      <audio id="audioPlayer" controls preload="metadata"></audio>
+    <div class="connection">
+      <span
+        id="connectionLamp"
+        class="connection__lamp"
+      ></span>
+
+      <span id="connectionText">
+        Подключение
+      </span>
     </div>
+  </header>
 
-    <button id="clearAudioButton" type="button">Убрать WAV</button>
-  </section>
+  <main class="layout">
+    <section class="dashboard">
+      <div class="cards">
+        <article class="card card-level">
+          <span>Текущий уровень</span>
+          <strong id="levelValue">0%</strong>
 
-  <section class="panel playback">
-    <button id="playPauseButton" type="button">▶ Старт</button>
-    <button id="stopButton" type="button">■ В начало</button>
+          <div class="level-meter">
+            <div id="levelMeterFill"></div>
+          </div>
+        </article>
 
-    <div>
-      <label for="timeline">Временная полоска</label>
-      <input id="timeline" type="range" min="0" max="1000" value="0" step="1">
-    </div>
+        <article class="card">
+          <span>RMS</span>
+          <strong id="rmsValue">0</strong>
+        </article>
 
-    <div>
-      <label for="durationInput">Длительность записи, сек</label>
-      <input id="durationInput" type="number" min="0.1" step="0.1" value="60">
-    </div>
+        <article class="card">
+          <span>Peak</span>
+          <strong id="peakValue">0</strong>
+        </article>
 
-    <div>
-      <label for="speedSelect">Скорость</label>
-      <select id="speedSelect">
-        <option value="0.25">0.25×</option>
-        <option value="0.5">0.5×</option>
-        <option value="1" selected>1×</option>
-        <option value="2">2×</option>
-        <option value="4">4×</option>
-      </select>
-    </div>
+        <article class="card">
+          <span>P2P</span>
+          <strong id="p2pValue">0</strong>
+        </article>
 
-    <div id="playbackTime" class="time-box">00:00.0 / 01:00.0</div>
-  </section>
+        <article class="card">
+          <span>Доминирующая полоса</span>
+          <strong id="frequencyValue">0 Гц</strong>
+        </article>
 
-  <p id="status" class="status"></p>
-
-  <section class="summary">
-    <article class="panel stat"><small>FRAME</small><strong id="sFrames">0</strong></article>
-    <article class="panel stat"><small>Первый кадр</small><strong id="sFirst">—</strong></article>
-    <article class="panel stat"><small>Последний кадр</small><strong id="sLast">—</strong></article>
-    <article class="panel stat"><small>count</small><strong id="sCount">—</strong></article>
-    <article class="panel stat"><small>tone</small><strong id="sTones">—</strong></article>
-    <article class="panel stat"><small>WAVE_K</small><strong id="sWave">—</strong></article>
-  </section>
-
-  <section class="grid">
-    <article class="panel card"><h2>FRAME</h2><div class="help">номер кадра ESP32</div><div class="canvas-wrap"><canvas id="cFrame"></canvas></div></article>
-    <article class="panel card"><h2>count</h2><div class="help">число сэмплов</div><div class="canvas-wrap"><canvas id="cCount"></canvas></div></article>
-    <article class="panel card"><h2>mean</h2><div class="help">среднее значение сигнала</div><div class="canvas-wrap"><canvas id="cMean"></canvas></div></article>
-    <article class="panel card"><h2>level</h2><div class="help">условная громкость</div><div class="canvas-wrap"><canvas id="cLevel"></canvas></div></article>
-    <article class="panel card"><h2>p2p</h2><div class="help">размах max-min</div><div class="canvas-wrap"><canvas id="cP2p"></canvas></div></article>
-    <article class="panel card"><h2>zc</h2><div class="help">грубая частота по пересечениям нуля</div><div class="canvas-wrap"><canvas id="cZc"></canvas></div></article>
-    <article class="panel card"><h2>f400</h2><div class="help">энергия компоненты 400 Гц</div><div class="canvas-wrap"><canvas id="cF400"></canvas></div></article>
-    <article class="panel card"><h2>f1000</h2><div class="help">энергия компоненты 1000 Гц</div><div class="canvas-wrap"><canvas id="cF1000"></canvas></div></article>
-    <article class="panel card"><h2>tone</h2><div class="help">NONE=0, 400=1, 1000=2</div><div class="canvas-wrap"><canvas id="cTone"></canvas></div></article>
-
-    <article class="panel card full">
-      <h2>WAVE_K выбранного кадра</h2>
-      <div class="help">короткий фрагмент формы волны</div>
-      <div class="wave-controls">
-        <div>
-          <label for="waveSelect">Выбрать FRAME</label>
-          <select id="waveSelect"></select>
-        </div>
-        <button id="prevWave">Предыдущий кадр</button>
+        <article class="card">
+          <span>FPS / ошибки</span>
+          <strong id="fpsValue">0 / 0</strong>
+        </article>
       </div>
-      <div class="canvas-wrap"><canvas id="cWave"></canvas></div>
-    </article>
-  </section>
-
-  <section class="panel footer">
-    Нажми «Загрузить data/000.*», затем «Старт»: WAV начнёт играть, а жёлтая полоска пойдёт по всем графикам. Новые логи с T_MS синхронизируются по фактическим временным меткам.
-  </section>
-</main>
-
-<script>
-"use strict";
-
-const EMBEDDED_LOG = ",9,8,14,13,10,14,17,11,14,21FRAME=18080 count=512 mean=6886 level=55052 p2p=406694 zc=2734.4 f400=3159.0 f1000=15453.0 tone=1000\nWAVE_K=-5,-67,-103,-25,-3,-8,29,-14,-72,-96,-137,-25,56,-74,-9,-5,-48,6,19,-11,-1,135,165,46,-1,24,23,-35,90,175,105,-9,-133,-85,-34,-25,-16,-41,14,-97,-1,9,8,14,13,10,14,17,11,14,21,17,17,15,15,11,9,16,20,21\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18150 count=512 mean=13310 level=12399 p2p=72818 zc=609.4 f400=40.3 f1000=3270.3 tone=1000\nWAVE_K=-23,-34,-37,-36,-32,-30,-32,-28,-23,-27,-28,-28,-29,-30,-28,-25,-28,-36,-39,-31,-33,-40,-44,-38,-27,-27,-33,-40,-30,-21,-19,-20,-22,-32,-34,-34,-36,-29,-28,-21,-20,-20,-21,-21,-20,-18,-16,-29\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18151 count=512 mean=-137307 level=38857 p2p=318082 zc=1968.7 f400=4370.8 f1000=7315.9 tone=NONE\nWAVE_K=1,-43,-74,-9,37,24,-37,-87,-88,-86,-51,-17,8,-21,-84,-100,-88,-26,24,49,22,-42,-92,-87,-71,-46,-46,-21,-6,1,12,-9,-25,-24,20,23,-13,-47,-68,-61,-41,-7,34,-2,-80,-128,-132,-81\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18152 count=512 mean=-44866 level=14115 p2p=126092 zc=2281.3 f400=92.1 f1000=2698.9 tone=1000\nWAVE_K=-11,-23,-17,4,0,-7,20,30,8,-15,-7,4,3,-6,-25,-36,-28,-14,-9,-25,-29,-11,26,26,8,-5,-5,11,6,3,-9,-25,-24,-16,-22,-22,-10,15,11,-2,-7,-2,12,4,-12,-24,-20,1\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18153 count=512 mean=227283 level=14126 p2p=116142 zc=2828.1 f400=208.4 f1000=3907.9 tone=1000\nWAVE_K=-1,4,1,9,10,3,6,14,28,10,15,24,-1,-4,10,18,10,2,2,-14,-34,12,50,14,0,-8,0,1,-2,11,2,16,12,-28,-22,8,-1,1,15,8,32,28,10,2,0,3,-4,9\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18154 count=512 mean=-37774 level=7004 p2p=42894 zc=1687.5 f400=230.2 f1000=778.7 tone=1000\nWAVE_K=-2,-5,-10,-10,-16,-12,-13,-12,-12,-12,-9,0,4,6,5,-4,-11,-17,-15,-12,-8,-3,1,-3,-4,-5,-13,-17,-14,-7,0,4,4,1,1,-1,-6,-9,-19,-21,-13,-6,-2,4,8,11,9,1\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18155 count=512 mean=-176325 level=9182 p2p=74790 zc=1296.9 f400=34.7 f1000=1515.4 tone=1000\nWAVE_K=-28,-29,-28,-27,-17,-13,-25,-24,-20,-8,-6,-16,-20,-23,-24,-23,-19,-22,-25,-27,-33,-28,-20,-19,-20,-13,-13,-13,-18,-25,-22,-21,-28,-28,-26,-30,-29,-36,-40,-22,-19,-18,-14,-11,-14,-21,-14,-14\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18156 count=512 mean=18361 level=8618 p2p=57700 zc=1734.4 f400=178.6 f1000=2049.3 tone=1000\nWAVE_K=5,16,16,15,24,20,7,1,9,11,17,8,15,21,20,10,1,6,4,8,1,0,0,2,15,11,-4,-5,-4,2,9,14,7,8,17,17,6,2,-1,8,13,6,10,11,10,7,8,2\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18157 count=512 mean=125695 level=113048 p2p=848854 zc=2171.9 f400=2023.9 f1000=9818.3 tone=1000\nWAVE_K=-14,232,320,317,180,-179,-413,-283,77,209,191,189,84,-20,-137,-199,-31,238,266,16,-147,-127,-33,45,86,190,246,54,-203,-358,-260,-56,96,281,279,94,-111,-146,-29,18,2,-95,12,167,101,-61,-133,45\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18158 count=512 mean=172668 level=34301 p2p=272234 zc=1984.4 f400=1910.6 f1000=3000.9 tone=NONE\nWAVE_K=-3,-18,-38,-44,-57,-56,-68,-97,-85,-14,18,-14,-44,-45,-18,-16,-47,-77,-29,2,-27,0,6,-46,-78,-71,-46,-25,-14,-13,-21,-43,-34,-18,-30,-2,11,-50,-72,0,17,-34,-67,-58,-1,33,-2,-26\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18159 count=512 mean=-27866 level=31429 p2p=232198 zc=2578.1 f400=576.2 f1000=6786.0 tone=1000\nWAVE_K=-27,-1,-21,-86,-59,-1,-3,-5,-16,-18,4,12,-16,-68,-55,-24,-36,-47,-44,-25,7,13,-25,-40,-13,-8,-26,-16,-29,-24,6,42,-22,-88,-54,-23,-26,-12,-4,11,27,18,-17,-64,-59,-17,-9,-1\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18160 count=512 mean=-178970 level=65309 p2p=515644 zc=2515.6 f400=1074.2 f1000=18679.5 tone=1000\nWAVE_K=-35,37,11,-102,-143,-64,21,82,39,32,120,25,-88,-41,63,57,-23,-23,34,-6,-92,-37,26,-13,-43,-80,-17,48,66,72,98,94,-32,-144,-165,-114,-15,70,12,38,139,61,-83,-96,20,83,108,128\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18161 count=512 mean=1581 level=27941 p2p=218896 zc=2421.9 f400=222.9 f1000=25949.6 tone=1000\nWAVE_K=58,27,9,32,16,5,9,-24,-55,-19,11,-7,-16,-26,-23,31,16,-12,28,47,11,-12,-17,-25,49,87,19,-41,-42,4,30,32,10,32,27,7,55,70,39,6,-6,-33,-26,6,-6,-13,-16,-41\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18162 count=512 mean=194819 level=40027 p2p=362126 zc=2703.1 f400=232.5 f1000=11718.7 tone=1000\nWAVE_K=-22,13,15,52,-22,-44,11,32,21,6,-39,-4,33,-21,-25,7,-29,-83,-30,8,50,84,35,31,27,-50,-129,17,101,39,14,5,44,76,17,-52,6,56,60,-21,2,47,43,23,-7,-16,-43,0\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18163 count=512 mean=-1585 level=44971 p2p=369018 zc=2718.7 f400=8436.9 f1000=53759.8 tone=1000\nWAVE_K=-80,45,78,31,32,-50,-56,-51,-38,-52,-77,-71,32,57,-29,-76,-125,-31,1,-7,29,-69,-59,13,-20,-117,-70,-30,-63,-102,-56,72,24,57,39,8,-14,-20,-51,-52,-103,-133,-19,5,10,19,-33,-26\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18164 count=512 mean=-230019 level=53124 p2p=399874 zc=2812.5 f400=2145.7 f1000=145041.8 tone=1000\nWAVE_K=13,146,76,50,-38,-146,-53,60,-5,81,43,-97,-50,-80,-43,-81,-61,-56,-28,46,-52,-7,59,105,-1,-9,3,29,15,-117,-90,-16,36,48,16,-81,-66,-60,-58,93,83,17,-55,-72,-32,-23,10,-64\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18165 count=512 mean=-81070 level=56108 p2p=392752 zc=2515.6 f400=4628.1 f1000=16528.5 tone=1000\nWAVE_K=44,133,147,87,46,70,19,-70,29,34,-5,-5,-13,8,47,90,33,-9,14,34,14,44,14,57,88,-61,-103,-21,40,-7,20,88,27,110,54,59,-3,25,82,59,64,26,-12,-21,1,-27,-3,-1\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18166 count=512 mean=86943 level=69019 p2p=484374 zc=2671.9 f400=414.1 f1000=45903.6 tone=1000\nWAVE_K=-3,-46,0,18,-3,-82,-118,-20,55,124,134,13,-143,-233,-118,170,251,93,33,-15,-53,-48,-64,-13,143,149,52,22,-14,12,-3,-64,-65,41,40,64,-9,-125,-19,170,205,1,-103,-164,-50,83,120,82\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18167 count=512 mean=154715 level=79945 p2p=586234 zc=2703.1 f400=662.6 f1000=53651.2 tone=1000\nWAVE_K=13,36,71,141,123,-52,-127,55,153,97,50,33,192,247,71,10,-3,-31,45,139,108,-70,-33,36,46,34,-91,-48,104,47,17,63,154,202,211,53,-68,59,56,89,0,-62,67,158,181,145,56,-92\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18168 count=512 mean=177457 level=84780 p2p=635914 zc=2968.7 f400=1527.6 f1000=16041.6 tone=1000\nWAVE_K=11,-37,-63,-244,-133,37,205,188,8,-23,-62,-16,-94,-111,-116,-38,29,88,98,30,26,23,-100,-23,119,-149,-153,11,90,58,61,96,-11,-124,-180,-119,12,99,83,44,31,17,51,-47,-88,24,-74,-81\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18169 count=512 mean=-5111 level=645347 p2p=2423398 zc=1000.0 f400=81.2 f1000=125258328.0 tone=1000\nWAVE_K=-1091,-895,-538,-297,-11,434,733,992,987,734,428,214,85,-403,-917,-1165,-992,-708,-463,-236,11,429,812,1002,972,707,637,402,-62,-492,-976,-1007,-911,-849,-639,-325,66,577,829,898,798,740,787,502,-52,-636,-933,-959\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18170 count=512 mean=-58196 level=211935 p2p=1316044 zc=1218.7 f400=22216.6 f1000=12430440.0 tone=1000\nWAVE_K=182,-18,-237,-318,-344,-451,-448,-412,-250,72,329,349,415,471,568,405,-26,-299,-445,-477,-423,-436,-456,-170,73,265,347,251,368,411,437,449,66,-40,-179,-252,-352,-540,-461,-151,68,147,214,357,618,676,509,203\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18171 count=512 mean=-43909 level=397971 p2p=1766480 zc=1031.2 f400=28838.7 f1000=46835132.0 tone=1000\nWAVE_K=-501,-519,-419,-53,363,712,671,456,430,457,290,70,-191,-344,-485,-486,-337,-351,-235,-44,148,320,433,613,528,358,217,-29,-248,-431,-568,-645,-743,-676,-265,132,354,380,602,749,542,296,143,106,-112,-263,-429,-523\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18172 count=512 mean=-32362 level=418826 p2p=1969220 zc=1015.6 f400=15784.7 f1000=51748956.0 tone=1000\nWAVE_K=128,-121,-301,-518,-600,-699,-467,-231,-136,-1,276,754,749,543,416,281,170,-148,-419,-654,-869,-610,-420,-297,55,259,479,625,602,628,553,407,126,-49,-322,-624,-743,-559,-206,-215,-152,129,292,587,723,613,543,374\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18173 count=512 mean=-120301 level=234068 p2p=919722 zc=1000.0 f400=455.8 f1000=16468656.0 tone=1000\nWAVE_K=-166,-251,-356,-374,-225,-47,64,108,161,257,386,430,298,128,-31,-129,-175,-250,-279,-250,-245,-177,-58,63,218,341,366,324,244,133,34,-54,-230,-371,-372,-291,-178,-91,-17,87,236,366,400,337,214,107,25,-71\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18174 count=512 mean=23362 level=167363 p2p=652814 zc=1000.0 f400=3047.7 f1000=8452212.0 tone=1000\nWAVE_K=-181,-84,10,99,191,258,251,200,147,98,-8,-144,-217,-247,-236,-172,-132,-74,2,91,219,318,301,206,123,45,-29,-100,-180,-231,-211,-172,-154,-96,6,125,192,198,193,214,174,48,-51,-157,-202,-208,-223,-196\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18175 count=512 mean=-100636 level=82051 p2p=372002 zc=1000.0 f400=1142.8 f1000=1948823.6 tone=1000\nWAVE_K=99,48,50,70,56,-2,-67,-98,-131,-145,-128,-56,-7,53,105,121,87,28,41,111,116,39,-47,-116,-115,-99,-88,-67,-26,60,99,58,51,99,96,40,10,-19,-70,-111,-137,-164,-128,-60,11,73,79,39\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18176 count=512 mean=-121451 level=120704 p2p=472420 zc=1000.0 f400=2559.5 f1000=4436679.5 tone=1000\nWAVE_K=193,181,133,54,-12,-64,-139,-181,-143,-90,-59,-12,50,100,146,169,167,142,116,49,-42,-111,-154,-150,-141,-126,-78,-9,59,94,153,192,190,158,118,56,-32,-88,-127,-155,-157,-117,-55,4,60,105,147,169\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18177 count=512 mean=-7373 level=462682 p2p=1552496 zc=1000.0 f400=7300.2 f1000=66021424.0 tone=1000\nWAVE_K=751,777,673,487,211,-115,-425,-660,-760,-737,-628,-443,-173,122,390,633,738,734,653,448,141,-167,-414,-601,-715,-748,-656,-448,-188,94,381,610,743,748,650,464,171,-167,-463,-663,-755,-734,-634,-469,-181,149,410,610\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18178 count=512 mean=-9713 level=186282 p2p=673660 zc=1000.0 f400=1287.8 f1000=10561563.0 tone=1000\nWAVE_K=-141,-54,43,142,222,293,308,270,217,126,21,-97,-226,-295,-284,-232,-158,-59,63,167,232,299,322,276,216,106,-19,-126,-219,-247,-234,-212,-148,-52,64,164,226,288,317,288,244,145,8,-118,-206,-252,-269,-240\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18179 count=512 mean=49705 level=396621 p2p=1283878 zc=1000.0 f400=7836.7 f1000=47718856.0 tone=1000\nWAVE_K=607,544,411,213,-21,-253,-442,-574,-615,-545,-393,-187,41,268,466,589,607,531,392,190,-47,-270,-454,-571,-600,-530,-384,-178,50,279,472,585,610,546,402,195,-50,-291,-479,-582,-593,-531,-393,-183,70,306,476,578\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18180 count=512 mean=-13022 level=662342 p2p=2117944 zc=1000.0 f400=28449.7 f1000=134291424.0 tone=1000\nWAVE_K=-406,-745,-967,-1044,-962,-727,-384,25,428,752,972,1055,975,726,373,-41,-426,-751,-980,-1048,-951,-700,-354,50,440,758,985,1053,952,704,353,-51,-441,-769,-986,-1044,-946,-695,-343,57,452,783,1002,1069,947,681,331,-69\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18181 count=512 mean=15642 level=306409 p2p=1030002 zc=1000.0 f400=3974.4 f1000=28625730.0 tone=1000\nWAVE_K=-477,-380,-215,-14,169,308,418,486,475,401,241,42,-162,-329,-441,-504,-457,-343,-200,-43,141,356,474,485,437,371,234,31,-182,-337,-447,-483,-468,-358,-198,-13,170,327,437,500,479,367,211,15,-187,-356,-429,-460\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18182 count=512 mean=-6049 level=288479 p2p=931032 zc=1000.0 f400=4186.0 f1000=25510590.0 tone=1000\nWAVE_K=393,277,129,-44,-205,-332,-415,-439,-393,-285,-136,33,196,326,413,438,388,272,121,-47,-209,-338,-419,-440,-390,-280,-130,40,205,335,420,440,385,266,113,-56,-214,-342,-422,-437,-385,-273,-120,50,210,341,421,438\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18183 count=512 mean=32193 level=433347 p2p=1381456 zc=1015.6 f400=14457.1 f1000=58077916.0 tone=1000\nWAVE_K=54,-211,-443,-610,-679,-647,-517,-308,-55,206,440,605,670,639,510,296,37,-222,-452,-612,-678,-643,-508,-297,-43,215,448,607,669,639,504,291,29,-237,-460,-621,-681,-639,-499,-284,-29,232,460,614,673,633,493,279\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18184 count=512 mean=-3459 level=283976 p2p=904426 zc=1000.0 f400=5805.5 f1000=24753186.0 tone=1000\nWAVE_K=181,315,408,438,398,302,156,-17,-189,-328,-420,-442,-401,-300,-157,7,179,320,412,427,381,287,145,-27,-200,-337,-429,-453,-407,-303,-157,12,183,323,414,432,385,282,136,-35,-204,-339,-427,-439,-390,-293,-148,27\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18185 count=512 mean=2308 level=112991 p2p=395866 zc=1000.0 f400=287.2 f1000=3998205.5 tone=1000\nWAVE_K=-144,-138,-112,-63,-7,51,103,146,173,176,153,112,58,-3,-65,-118,-141,-141,-114,-67,-4,55,105,148,172,173,152,110,50,-11,-70,-123,-149,-147,-115,-65,-11,46,102,143,168,173,151,104,45,-16,-75,-125\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18186 count=512 mean=106802 level=57727 p2p=304484 zc=1000.0 f400=3059.5 f1000=1017007.1 tone=1000\nWAVE_K=52,65,71,72,59,29,-1,-25,-41,-51,-64,-59,-36,-10,12,33,46,57,70,72,57,36,8,-19,-41,-55,-61,-50,-32,-10,18,42,54,64,78,74,55,30,7,-18,-42,-57,-62,-56,-33,-11,10,33\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18187 count=512 mean=34767 level=194698 p2p=654202 zc=1000.0 f400=6269.1 f1000=11607240.0 tone=1000\nWAVE_K=178,264,299,294,260,187,95,-18,-132,-226,-282,-284,-233,-145,-43,45,136,231,301,311,259,157,49,-52,-150,-224,-275,-294,-267,-176,-51,63,164,246,296,302,265,189,86,-34,-158,-251,-286,-262,-215,-149,-57,55\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18188 count=512 mean=-6772 level=181338 p2p=624780 zc=1000.0 f400=2330.0 f1000=9381886.0 tone=1000\nWAVE_K=-255,-227,-162,-67,33,130,208,251,250,211,146,52,-60,-157,-229,-273,-274,-235,-160,-60,41,134,206,243,245,203,128,36,-70,-162,-229,-267,-263,-224,-154,-56,51,147,219,251,245,203,128,31,-76,-171,-239,-272\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18189 count=512 mean=84846 level=62377 p2p=255160 zc=1000.0 f400=357.9 f1000=1161457.9 tone=1000\nWAVE_K=71,113,105,65,34,13,-17,-58,-76,-80,-89,-81,-65,-36,15,50,81,82,65,62,41,-15,-53,-67,-81,-107,-128,-98,-63,-52,-19,39,74,78,71,54,24,-10,-33,-59,-87,-96,-106,-95,-76,-39,6,35\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18190 count=512 mean=-79778 level=139406 p2p=477750 zc=1015.6 f400=1848.8 f1000=5591121.0 tone=1000\nWAVE_K=-86,-11,67,140,192,215,198,151,86,4,-72,-141,-190,-203,-195,-155,-92,-11,76,152,196,209,195,150,84,-2,-79,-140,-184,-199,-187,-146,-79,1,81,149,194,205,191,147,68,-10,-85,-152,-188,-203,-196,-146\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18191 count=512 mean=62610 level=515517 p2p=1749794 zc=1000.0 f400=40205.0 f1000=78126040.0 tone=1000\nWAVE_K=758,773,688,474,170,-125,-395,-645,-784,-796,-701,-506,-217,81,382,628,763,792,693,491,200,-128,-439,-661,-799,-815,-665,-440,-138,172,434,635,736,726,604,408,141,-152,-409,-613,-759,-769,-678,-482,-197,102,404,649\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18192 count=512 mean=47265 level=78515 p2p=410756 zc=1000.0 f400=139.1 f1000=1746908.4 tone=1000\nWAVE_K=27,18,67,154,162,126,105,68,-2,-94,-148,-175,-172,-157,-128,-80,-4,85,153,149,107,74,49,22,-14,-70,-144,-176,-158,-139,-125,-109,-40,63,143,147,100,83,102,72,-25,-114,-134,-130,-135,-157,-147,-57\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18193 count=512 mean=5903 level=299241 p2p=958342 zc=1000.0 f400=9123.0 f1000=27783092.0 tone=1000\nWAVE_K=105,270,403,467,459,378,235,59,-115,-277,-402,-464,-454,-374,-238,-63,116,276,399,460,448,368,228,51,-125,-291,-416,-473,-451,-367,-231,-58,124,292,411,467,449,360,224,48,-125,-290,-416,-474,-457,-364,-219,-37\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18194 count=512 mean=7042 level=349103 p2p=1116548 zc=1000.0 f400=4907.3 f1000=37335140.0 tone=1000\nWAVE_K=523,541,485,351,161,-52,-261,-438,-537,-546,-481,-350,-159,46,245,420,529,543,475,334,137,-71,-266,-429,-525,-540,-484,-350,-149,63,262,435,534,544,477,334,134,-82,-279,-444,-537,-541,-476,-335,-137,71,271,437\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18195 count=512 mean=-22948 level=381461 p2p=1220862 zc=1000.0 f400=10161.4 f1000=44614124.0 tone=1000\nWAVE_K=377,154,-74,-300,-483,-582,-595,-516,-349,-134,88,303,480,582,591,512,349,133,-93,-305,-481,-581,-589,-513,-350,-140,87,310,492,597,601,516,348,126,-104,-324,-499,-588,-582,-498,-333,-119,104,322,498,587,582,497\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18196 count=512 mean=-14135 level=387125 p2p=1234354 zc=1000.0 f400=11764.1 f1000=46240840.0 tone=1000\nWAVE_K=-373,-534,-605,-579,-471,-286,-61,165,380,543,614,587,475,289,60,-168,-376,-533,-594,-569,-463,-275,-45,186,401,556,617,587,470,277,51,-181,-391,-544,-607,-577,-465,-278,-50,185,398,550,609,577,453,263,36,-193\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18197 count=512 mean=25393 level=390461 p2p=1260490 zc=1000.0 f400=7515.6 f1000=46747480.0 tone=1000\nWAVE_K=-609,-524,-351,-128,97,322,503,599,600,524,361,136,-99,-314,-494,-592,-590,-508,-352,-123,119,346,528,620,613,528,363,135,-98,-322,-508,-595,-579,-485,-321,-98,133,348,517,610,608,516,347,131,-103,-323,-497,-589\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18198 count=512 mean=45496 level=9765 p2p=83800 zc=1156.2 f400=1745.1 f1000=4518.0 tone=1000\nWAVE_K=51,51,53,38,29,26,20,18,15,11,10,17,12,15,21,30,28,11,7,4,8,6,-2,-1,-13,-22,-23,-13,-14,-9,0,14,16,13,14,-1,-9,-9,-7,-8,2,4,6,8,15,22,22,25\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18199 count=512 mean=234895 level=6652 p2p=35444 zc=609.4 f400=30.6 f1000=458.7 tone=1000\nWAVE_K=4,3,4,7,7,5,7,6,5,4,1,0,-1,-1,0,2,5,7,7,7,6,7,4,2,1,1,0,0,0,0,-1,-3,0,1,3,3,2,3,1,2,0,-1,-2,-1,-3,-2,-1,3\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18200 count=512 mean=100476 level=31631 p2p=143886 zc=515.6 f400=653.5 f1000=498.6 tone=NONE\nWAVE_K=-40,-37,-43,-53,-61,-56,-46,-46,-54,-57,-52,-49,-49,-54,-52,-53,-54,-51,-47,-46,-54,-58,-57,-50,-50,-60,-68,-66,-62,-60,-55,-49,-45,-51,-58,-57,-48,-46,-56,-68,-66,-57,-53,-55,-57,-55,-53,-47\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18201 count=512 mean=-23029 level=6390 p2p=27644 zc=218.7 f400=25.0 f1000=22.8 tone=NONE\nWAVE_K=10,9,8,8,8,10,9,7,9,7,8,9,6,6,7,7,7,6,6,5,4,3,4,5,4,4,4,4,5,6,7,6,7,5,5,4,4,4,3,1,3,1,0,1,1,0,1,3\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18202 count=512 mean=30856 level=4203 p2p=27454 zc=859.4 f400=10.7 f1000=109.8 tone=1000\nWAVE_K=-10,-11,-9,-11,-12,-10,-9,-9,-10,-11,-9,-9,-7,-7,-6,-6,-5,-7,-5,-5,-5,-4,-6,-3,-4,-4,-5,-6,-7,-8,-8,-10,-10,-12,-14,-12,-11,-11,-10,-12,-13,-12,-12,-10,-7,-7,-6,-8\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18203 count=512 mean=-53402 level=4762 p2p=34506 zc=1234.4 f400=72.2 f1000=707.7 tone=1000\nWAVE_K=-8,-10,-7,-7,-4,-2,-3,-4,-1,-1,-1,-4,-5,-5,0,1,0,-2,-5,-5,-4,-4,-6,-5,-1,-1,0,1,2,0,-1,0,0,-1,-1,-2,0,-1,0,0,2,3,0,0,2,3,3,0\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18204 count=512 mean=-195042 level=10433 p2p=56906 zc=453.1 f400=429.1 f1000=123.9 tone=400\nWAVE_K=-11,-15,-15,-14,-16,-15,-14,-13,-14,-16,-15,-12,-12,-11,-12,-12,-13,-14,-13,-14,-15,-14,-12,-13,-12,-14,-17,-16,-18,-18,-17,-17,-17,-21,-21,-23,-23,-20,-21,-23,-24,-24,-24,-25,-23,-23,-24,-24\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18205 count=512 mean=-54435 level=3037 p2p=22662 zc=1390.6 f400=2.8 f1000=37.4 tone=NONE\nWAVE_K=-4,-5,-3,0,1,1,3,4,1,0,0,3,7,8,11,11,8,3,0,1,2,3,4,3,1,1,0,0,0,0,-3,-4,-3,-2,-1,0,1,3,0,0,0,0,0,3,4,6,10,6\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18206 count=512 mean=-37135 level=2475 p2p=16436 zc=1234.4 f400=9.0 f1000=25.2 tone=NONE\nWAVE_K=0,-3,-3,-3,-1,-3,-2,-4,-4,-6,-6,-6,-4,-3,-3,-2,-4,-3,-2,-3,-3,-2,-3,-1,1,2,0,0,0,0,0,-2,-3,-4,-3,-2,-4,-3,-4,-6,-8,-7,-8,-6,-6,-5,-3,-3\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18207 count=512 mean=-24473 level=3313 p2p=21258 zc=781.2 f400=83.1 f1000=16.2 tone=NONE\nWAVE_K=0,2,1,0,0,0,3,5,2,2,0,-1,-3,-2,-3,0,0,0,0,-1,-2,-1,0,0,3,3,4,3,2,5,6,9,9,4,2,2,3,5,4,4,6,4,5,3,2,2,3,3\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18208 count=512 mean=48715 level=10746 p2p=64580 zc=546.9 f400=46.7 f1000=229.7 tone=1000\nWAVE_K=17,13,14,17,19,19,20,21,19,19,18,20,21,22,24,25,25,26,25,24,24,24,23,22,25,26,24,25,23,25,24,20,20,18,17,18,17,18,17,18,16,14,13,11,10,9,12,14\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18209 count=512 mean=227670 level=10826 p2p=63006 zc=328.1 f400=187.6 f1000=75.7 tone=400\nWAVE_K=25,23,22,24,27,23,21,22,23,26,26,26,27,26,28,31,29,24,25,26,28,26,24,24,24,21,21,20,17,16,16,16,16,16,18,16,12,11,11,15,17,15,16,13,15,19,17,14\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18210 count=512 mean=22080 level=7534 p2p=45758 zc=1046.9 f400=338.2 f1000=120.0 tone=400\nWAVE_K=2,5,12,17,14,11,7,4,4,6,7,8,4,-4,-3,-1,-3,-6,-4,-5,-7,-3,-5,-8,-7,-5,-1,2,3,2,-8,-7,4,9,6,5,5,4,3,-1,4,9,0,-2,1,3,0,0\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18211 count=512 mean=10375 level=13026 p2p=59826 zc=296.9 f400=226.1 f1000=77.6 tone=400\nWAVE_K=-31,-32,-32,-29,-29,-27,-31,-30,-26,-26,-29,-30,-25,-22,-24,-25,-25,-28,-27,-24,-22,-23,-26,-24,-19,-20,-22,-22,-22,-24,-24,-21,-20,-24,-20,-18,-22,-24,-20,-17,-19,-23,-22,-18,-16,-19,-21,-23\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18212 count=512 mean=16289 level=5222 p2p=38656 zc=906.2 f400=493.4 f1000=55.3 tone=400\nWAVE_K=-9,-7,-10,-7,-5,-6,-7,-6,-5,-6,-6,-6,-8,-7,-7,-6,-6,-9,-8,-6,-4,-4,-3,-2,0,0,2,3,0,0,0,0,0,1,2,3,2,0,0,1,3,0,0,-2,0,0,-1,0\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18213 count=512 mean=64985 level=9752 p2p=64578 zc=640.6 f400=197.8 f1000=23.4 tone=400\nWAVE_K=-28,-32,-32,-28,-24,-24,-20,-19,-19,-21,-21,-18,-17,-15,-12,-12,-13,-13,-10,-7,-3,-5,-4,-8,-18,-20,-19,-14,-7,-9,-14,-22,-24,-21,-19,-19,-20,-19,-17,-15,-14,-13,-16,-15,-11,-11,-10,-10\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18214 count=512 mean=-188586 level=7118 p2p=42532 zc=1171.9 f400=49.0 f1000=211.7 tone=1000\nWAVE_K=-23,-17,-13,-11,-16,-21,-18,-17,-17,-14,-13,-16,-18,-17,-12,-13,-15,-15,-10,-7,-4,-11,-13,-7,-8,-9,-12,-11,-9,-17,-19,-17,-14,-13,-15,-15,-10,-17,-18,-14,-13,-10,-13,-16,-9,-12,-16,-13\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18215 count=512 mean=-83768 level=5971 p2p=41464 zc=1312.5 f400=157.7 f1000=14.5 tone=400\nWAVE_K=4,8,5,8,-2,-3,-1,-4,0,4,3,1,1,-3,-2,6,8,5,5,0,-2,0,3,4,4,0,-9,-9,-13,-18,-16,-10,-6,-4,-9,-10,-9,-13,-12,-9,-5,-4,-6,-6,-8,-1,0,1\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18216 count=512 mean=128323 level=16880 p2p=111428 zc=640.6 f400=621.0 f1000=262.2 tone=400\nWAVE_K=17,24,33,36,39,35,35,26,16,13,19,24,22,23,23,26,29,29,25,20,17,15,14,10,3,-2,-2,0,-4,-13,-12,-6,-3,4,4,12,18,13,9,7,5,0,-1,0,-1,0,2,6\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18217 count=512 mean=-22327 level=6036 p2p=56552 zc=2343.8 f400=20.1 f1000=171.0 tone=1000\nWAVE_K=-3,-6,-3,-1,3,0,-1,3,-3,0,4,0,-9,-7,5,-1,7,8,5,11,7,7,1,6,0,-3,10,9,10,6,-2,0,5,6,8,3,9,4,0,3,0,4,-12,-7,-2,-2,2,-3\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18218 count=512 mean=119620 level=15611 p2p=102030 zc=1968.7 f400=7972.7 f1000=210.3 tone=400\nWAVE_K=48,32,12,-5,29,39,1,8,13,42,38,18,1,22,53,33,-4,4,17,12,0,7,4,10,-10,7,10,-10,-14,0,13,9,1,2,6,11,14,-14,1,29,30,18,0,22,47,27,26,33\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18219 count=512 mean=223288 level=37998 p2p=278910 zc=3000.0 f400=86.2 f1000=2153.4 tone=1000\nWAVE_K=9,26,-110,-127,-61,7,-32,61,61,41,67,43,13,-106,-150,-56,-61,-28,54,49,19,14,47,54,-52,-131,-47,48,44,45,64,15,-51,-72,-34,-26,-33,30,-13,88,96,64,53,4,-33,-59,-88,-39\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18220 count=512 mean=3308 level=10797 p2p=77166 zc=1921.9 f400=538.7 f1000=170.8 tone=400\nWAVE_K=17,23,17,8,0,-1,-2,-2,-2,6,9,-7,-11,-6,-4,-11,8,19,-2,-16,-12,-8,-12,-5,4,-8,-14,0,1,-6,8,20,8,1,-1,12,0,-7,-7,20,21,2,-2,-8,-16,-12,16,27\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18221 count=512 mean=-134458 level=15108 p2p=94834 zc=1140.6 f400=372.7 f1000=1143.7 tone=1000\nWAVE_K=-33,-44,-44,-44,-43,-38,-25,-14,-24,-37,-50,-44,-40,-41,-42,-42,-29,-27,-33,-45,-41,-27,-19,-12,-13,-24,-39,-42,-27,-18,-11,-20,-42,-41,-32,-31,-23,-11,-9,-25,-33,-34,-34,-32,-41,-34,-23,-20\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18222 count=512 mean=-219023 level=36493 p2p=360160 zc=2703.1 f400=311.7 f1000=19444.1 tone=1000\nWAVE_K=-6,-18,-27,-45,20,23,-31,-24,-9,-44,-16,13,11,23,41,29,26,52,7,15,-14,-23,-8,-37,-49,-5,-5,-3,3,-15,-3,6,-13,-21,-17,-38,-35,24,-8,-43,-40,-48,-43,-11,5,0,25,20\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18223 count=512 mean=-32460 level=57287 p2p=226478 zc=421.9 f400=999673.6 f1000=1110.4 tone=400\nWAVE_K=-3,-23,-30,-33,-55,-72,-79,-77,-67,-66,-65,-72,-56,-48,-51,-63,-46,-31,-4,27,30,28,35,47,73,93,102,106,91,97,105,114,98,70,70,62,40,30,22,11,-12,-31,-33,-37,-60,-68,-80,-100\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18224 count=512 mean=120085 level=66425 p2p=280924 zc=421.9 f400=1301028.3 f1000=3718.5 tone=400\nWAVE_K=81,98,96,101,111,93,77,67,49,46,49,20,-26,-53,-64,-64,-72,-65,-53,-54,-78,-101,-98,-102,-98,-88,-83,-77,-74,-65,-26,-17,-12,7,14,26,36,54,86,107,119,115,106,105,75,40,47,67\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18225 count=512 mean=180448 level=66199 p2p=254216 zc=406.2 f400=1327582.3 f1000=486.8 tone=400\nWAVE_K=-71,-73,-76,-78,-80,-73,-64,-55,-33,-23,-16,-9,-9,5,30,57,71,74,81,100,109,115,116,100,101,93,85,82,75,61,38,16,4,-19,-48,-57,-72,-83,-77,-75,-73,-88,-107,-114,-96,-79,-74,-70\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18226 count=512 mean=164980 level=76216 p2p=327308 zc=437.5 f400=1713631.9 f1000=651.6 tone=400\nWAVE_K=97,120,129,106,52,37,39,24,-2,-25,-35,-53,-84,-76,-75,-89,-112,-142,-127,-117,-125,-152,-142,-87,-77,-114,-102,-42,-26,-55,-47,7,60,71,51,47,77,101,83,71,103,99,79,66,64,91,78,48\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18227 count=512 mean=106246 level=73042 p2p=330834 zc=625.0 f400=1562107.9 f1000=1848.3 tone=400\nWAVE_K=-121,-87,-41,-73,-132,-105,-84,-72,-34,-14,12,14,20,30,28,66,116,119,101,111,111,102,110,92,79,87,56,49,28,-24,-85,-63,28,-17,-69,-93,-116,-147,-111,-87,-102,-106,-92,-93,-107,-69,-46,-47\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18228 count=512 mean=36902 level=75633 p2p=286518 zc=406.2 f400=1713095.4 f1000=1373.5 tone=400\nWAVE_K=97,89,72,53,38,21,5,-6,-36,-67,-94,-109,-115,-126,-132,-135,-132,-135,-134,-122,-111,-105,-90,-78,-66,-59,-37,-16,1,27,51,69,76,81,100,116,127,137,134,117,95,88,74,65,45,22,5,-22\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18229 count=512 mean=-102854 level=85975 p2p=331990 zc=406.2 f400=2193409.2 f1000=6984.9 tone=400\nWAVE_K=-97,-75,-66,-33,-29,-51,-53,-31,-35,13,53,70,85,103,120,119,151,135,88,85,100,85,81,63,20,14,-12,-67,-124,-124,-135,-170,-124,-104,-129,-140,-102,-129,-159,-128,-113,-109,-106,-87,-84,-58,-10,12\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18230 count=512 mean=-3194 level=86046 p2p=315360 zc=406.2 f400=2246485.0 f1000=190.0 tone=400\nWAVE_K=85,63,42,25,2,-28,-57,-82,-102,-114,-121,-132,-136,-138,-141,-138,-133,-122,-113,-103,-93,-78,-66,-50,-29,-9,6,26,49,69,84,95,107,119,124,123,117,105,94,86,75,54,37,20,-6,-35,-60,-83\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18231 count=512 mean=45283 level=82692 p2p=305522 zc=406.2 f400=2040174.3 f1000=3341.8 tone=400\nWAVE_K=-75,-70,-57,-35,-15,1,15,31,48,61,75,90,103,112,115,107,99,90,82,67,44,28,16,-4,-32,-58,-83,-98,-112,-126,-127,-130,-125,-119,-112,-105,-95,-83,-77,-69,-54,-43,-27,-5,20,42,64,82\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18232 count=512 mean=83534 level=79063 p2p=309212 zc=406.2 f400=1881266.9 f1000=524.0 tone=400\nWAVE_K=37,17,-4,-30,-59,-85,-104,-118,-131,-140,-142,-144,-147,-142,-134,-125,-115,-104,-94,-85,-69,-52,-35,-15,7,29,45,64,77,91,101,111,120,120,118,114,104,94,82,68,55,35,11,-10,-37,-60,-77,-88\n---\nREAD_ERR=0 READ_BYTES=2048\nFRAME=18233 count=512 mean=7626 level=77258 p2p=271106 zc=406.2 f400=1834574.8 f1000=1062.5 tone=400\nWAVE_K=-46,-29,-7,9,28,44,59,72,90,96,109,117,119,113,104,100,88,78,66,52,27,7,-11,-36,-59,-83,-101,-109,-113,-115,-119,-115,-110,-114,-109,-96,-89,-80,-72,-60,-48,-29,-6,6,30,52,72,84\n---\n";
-
-const FRAME_RE = /FRAME=(\d+)\s+count=(\d+)\s+mean=(-?\d+)\s+level=(-?\d+)\s+p2p=(-?\d+)\s+zc=(-?\d+(?:\.\d+)?)\s+f400=(-?\d+(?:\.\d+)?)\s+f1000=(-?\d+(?:\.\d+)?)\s+tone=([A-Z0-9]+)/;
-const HEADER_RE = /<<\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*>>/;
-const WAVE_RE = /WAVE_K=([-\d,\s]+)/;
-const TIME_RE = /T_MS=(-?\d+(?:\.\d+)?)/;
-
-const toneMap = {NONE:0,"400":1,"1000":2};
-const toneNames = {0:"NONE",1:"400",2:"1000"};
-
-let blocks = [];
-let currentFrames = [];
-let waveFrames = [];
-let hoverInfo = new Map();
-
-let playbackIndex = 0;
-let playbackRunning = false;
-let playbackStartedAt = 0;
-let playbackElapsedMs = 0;
-let playbackAnimationId = null;
-let playbackLastPaintAt = 0;
-
-const playPauseButton = document.getElementById("playPauseButton");
-const stopButton = document.getElementById("stopButton");
-const timeline = document.getElementById("timeline");
-const durationInput = document.getElementById("durationInput");
-const speedSelect = document.getElementById("speedSelect");
-const playbackTime = document.getElementById("playbackTime");
-
-const parameterCharts = [
-  ["cFrame","frame","FRAME",false],
-  ["cCount","count","count",false],
-  ["cMean","mean","mean",false],
-  ["cLevel","level","level",false],
-  ["cP2p","p2p","p2p",false],
-  ["cZc","zc","zc",false],
-  ["cF400","f400","f400",false],
-  ["cF1000","f1000","f1000",false],
-  ["cTone","tone","tone",true]
-];
-
-const statusEl = document.getElementById("status");
-const blockSelect = document.getElementById("blockSelect");
-const fileInput = document.getElementById("fileInput");
-const waveSelect = document.getElementById("waveSelect");
-const audioInput = document.getElementById("audioInput");
-const audioPlayer = document.getElementById("audioPlayer");
-const audioState = document.getElementById("audioState");
-const loadPairButton = document.getElementById("loadPairButton");
-const clearAudioButton = document.getElementById("clearAudioButton");
-let audioObjectUrl = null;
-
-function setStatus(text, error=false){
-  statusEl.textContent = text;
-  statusEl.classList.toggle("error", error);
-}
-
-function parseLog(text){
-  const lines = text.split(/\r?\n/);
-  const result = [];
-  let block = null;
-  let lastFrame = null;
-
-  function defaultBlock(){
-    return {
-      label:"Без заголовка",
-      timeValue:null,
-      freqHz:null,
-      volumePercent:null,
-      frames:[]
-    };
-  }
-
-  lines.forEach((line, index) => {
-    const hm = line.match(HEADER_RE);
-    if(hm){
-      block = {
-        label:`${hm[1]} сек · ${hm[2]} Гц · ${hm[3]}%`,
-        timeValue:Number(hm[1]),
-        freqHz:Number(hm[2]),
-        volumePercent:Number(hm[3]),
-        frames:[]
-      };
-      result.push(block);
-      lastFrame = null;
-      return;
-    }
-
-    const tm = line.match(TIME_RE);
-    const fm = line.match(FRAME_RE);
-    if(fm){
-      if(!block){
-        block = defaultBlock();
-        result.push(block);
-      }
-      const frame = {
-        sourceLine:index+1,
-        timeMs:tm ? Number(tm[1]) : null,
-        frame:Number(fm[1]),
-        count:Number(fm[2]),
-        mean:Number(fm[3]),
-        level:Number(fm[4]),
-        p2p:Number(fm[5]),
-        zc:Number(fm[6]),
-        f400:Number(fm[7]),
-        f1000:Number(fm[8]),
-        tone:fm[9],
-        waveK:[]
-      };
-      block.frames.push(frame);
-      lastFrame = frame;
-      return;
-    }
-
-    const wm = line.match(WAVE_RE);
-    if(wm && lastFrame){
-      lastFrame.waveK = wm[1].split(",").map(v=>Number(v.trim())).filter(Number.isFinite);
-    }
-  });
-
-  return result.filter(b=>b.frames.length);
-}
-
-function mode(values){
-  const counts = new Map();
-  let best = null, bestCount = -1;
-  values.forEach(v=>{
-    const c=(counts.get(v)||0)+1;
-    counts.set(v,c);
-    if(c>bestCount){best=v;bestCount=c;}
-  });
-  return best;
-}
-
-function niceNumber(value){
-  if(!Number.isFinite(value)) return "—";
-  const abs=Math.abs(value);
-  if(abs>=1e9) return (value/1e9).toFixed(2)+"B";
-  if(abs>=1e6) return (value/1e6).toFixed(2)+"M";
-  if(abs>=1e3) return (value/1e3).toFixed(1)+"K";
-  return String(Math.round(value*100)/100);
-}
-
-function setupCanvas(canvas){
-  const rect=canvas.getBoundingClientRect();
-  const ratio=window.devicePixelRatio||1;
-  canvas.width=Math.max(1,Math.round(rect.width*ratio));
-  canvas.height=Math.max(1,Math.round(rect.height*ratio));
-  const ctx=canvas.getContext("2d");
-  ctx.setTransform(ratio,0,0,ratio,0,0);
-  return {ctx,width:rect.width,height:rect.height};
-}
-
-function drawChart(canvasId, frames, field, title, toneAxis=false){
-  const canvas=document.getElementById(canvasId);
-  const {ctx,width,height}=setupCanvas(canvas);
-  ctx.clearRect(0,0,width,height);
-
-  const pad={left:64,right:18,top:18,bottom:42};
-  const plotW=Math.max(1,width-pad.left-pad.right);
-  const plotH=Math.max(1,height-pad.top-pad.bottom);
-
-  if(!frames.length){
-    ctx.fillStyle="#9aa7c7";
-    ctx.font="14px system-ui";
-    ctx.fillText("Нет данных",pad.left,pad.top+20);
-    return;
-  }
-
-  const xs=frames.map(f=>f.frame);
-  const ys=frames.map(f=>field==="frame"?f.frame:(field==="tone"?(toneMap[f.tone]??3):f[field]));
-  let minY=Math.min(...ys), maxY=Math.max(...ys);
-  if(minY===maxY){minY-=1;maxY+=1;}
-  const extra=(maxY-minY)*0.08;
-  minY-=extra; maxY+=extra;
-
-  const minX=Math.min(...xs), maxX=Math.max(...xs);
-  const xSpan=Math.max(1,maxX-minX);
-  const ySpan=Math.max(1e-9,maxY-minY);
-
-  const xToPx=x=>pad.left+((x-minX)/xSpan)*plotW;
-  const yToPx=y=>pad.top+plotH-((y-minY)/ySpan)*plotH;
-
-  ctx.strokeStyle="rgba(154,167,199,.15)";
-  ctx.lineWidth=1;
-  ctx.fillStyle="#9aa7c7";
-  ctx.font="12px system-ui";
-  ctx.textAlign="right";
-  ctx.textBaseline="middle";
-
-  for(let i=0;i<=5;i++){
-    const y=pad.top+(plotH/5)*i;
-    const value=maxY-(ySpan/5)*i;
-    ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(width-pad.right,y);ctx.stroke();
-    const label=toneAxis?(toneNames[Math.round(value)]??""):niceNumber(value);
-    ctx.fillText(label,pad.left-8,y);
-  }
-
-  ctx.textAlign="center";
-  ctx.textBaseline="top";
-  for(let i=0;i<=5;i++){
-    const x=pad.left+(plotW/5)*i;
-    const value=minX+(xSpan/5)*i;
-    ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+plotH);ctx.stroke();
-    ctx.fillText(String(Math.round(value)),x,pad.top+plotH+8);
-  }
-
-  ctx.strokeStyle="#67b7ff";
-  ctx.lineWidth=1.7;
-  ctx.beginPath();
-  ys.forEach((y,i)=>{
-    const px=xToPx(xs[i]), py=yToPx(y);
-    if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle="#67b7ff";
-  ys.forEach((y,i)=>{
-    const px=xToPx(xs[i]),py=yToPx(y);
-    ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();
-  });
-
-  hoverInfo.set(canvas,{
-    frames,field,title,toneAxis,minX,maxX,minY,maxY,pad,plotW,plotH
-  });
-  drawPlayhead(canvas);
-}
-
-
-function formatPlaybackTime(seconds){
-  const safe=Math.max(0,Number(seconds)||0);
-  const minutes=Math.floor(safe/60);
-  const secs=safe-minutes*60;
-  return `${String(minutes).padStart(2,"0")}:${secs.toFixed(1).padStart(4,"0")}`;
-}
-
-function hasAudio(){
-  return Boolean(audioPlayer.getAttribute("src"));
-}
-
-function getPlaybackDurationMs(){
-  if(hasAudio() && Number.isFinite(audioPlayer.duration) && audioPlayer.duration>0){
-    return audioPlayer.duration*1000;
-  }
-  return Math.max(100,Number(durationInput.value||60)*1000);
-}
-
-function currentPlaybackElapsedMs(now=performance.now()){
-  if(hasAudio() && Number.isFinite(audioPlayer.currentTime)){
-    return audioPlayer.currentTime*1000;
-  }
-  if(!playbackRunning)return playbackElapsedMs;
-  const speed=Math.max(0.01,Number(speedSelect.value)||1);
-  return playbackElapsedMs+(now-playbackStartedAt)*speed;
-}
-
-function frameIndexForElapsedMs(elapsedMs){
-  if(!currentFrames.length)return 0;
-
-  const timed=currentFrames.every(frame=>Number.isFinite(frame.timeMs));
-  if(!timed){
-    const durationMs=getPlaybackDurationMs();
-    const progress=durationMs>0?Math.max(0,Math.min(1,elapsedMs/durationMs)):0;
-    return currentFrames.length<=1
-      ? 0
-      : Math.round(progress*(currentFrames.length-1));
-  }
-
-  let low=0;
-  let high=currentFrames.length-1;
-  while(low<high){
-    const mid=Math.floor((low+high)/2);
-    if(currentFrames[mid].timeMs<elapsedMs)low=mid+1;
-    else high=mid;
-  }
-
-  if(low===0)return 0;
-  const before=currentFrames[low-1];
-  const after=currentFrames[low];
-  return Math.abs(before.timeMs-elapsedMs)<=Math.abs(after.timeMs-elapsedMs)
-    ? low-1
-    : low;
-}
-
-function drawPlayhead(canvas){
-  if(!currentFrames.length)return;
-  const info=hoverInfo.get(canvas);
-  if(!info||info.wave)return;
-
-  const index=Math.max(0,Math.min(currentFrames.length-1,playbackIndex));
-  const frame=currentFrames[index];
-  const xSpan=Math.max(1,info.maxX-info.minX);
-  const x=info.pad.left+((frame.frame-info.minX)/xSpan)*info.plotW;
-  const ctx=canvas.getContext("2d");
-
-  ctx.save();
-  ctx.strokeStyle="#fbbf24";
-  ctx.lineWidth=2;
-  ctx.setLineDash([7,5]);
-  ctx.beginPath();
-  ctx.moveTo(x,info.pad.top);
-  ctx.lineTo(x,info.pad.top+info.plotH);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.fillStyle="#fbbf24";
-  ctx.beginPath();
-  ctx.arc(x,info.pad.top+5,4,0,Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function redrawParameterCharts(){
-  parameterCharts.forEach(([canvasId,field,title,toneAxis])=>{
-    drawChart(canvasId,currentFrames,field,title,toneAxis);
-  });
-}
-
-function updatePlaybackTime(){
-  const durationMs=getPlaybackDurationMs();
-  const elapsedMs=Math.min(durationMs,currentPlaybackElapsedMs());
-  const frame=currentFrames[playbackIndex];
-  playbackTime.textContent=
-    `${formatPlaybackTime(elapsedMs/1000)} / ${formatPlaybackTime(durationMs/1000)}`+
-    (frame?` · FRAME ${frame.frame}`:"");
-}
-
-function selectWaveForPlaybackFrame(frame){
-  if(!frame)return;
-  const waveIndex=waveFrames.findIndex(item=>item.frame===frame.frame);
-  if(waveIndex>=0){
-    waveSelect.value=String(waveIndex);
-    drawWave(waveFrames[waveIndex]);
-  }
-}
-
-function renderPlaybackIndex(index,updateWave=true){
-  if(!currentFrames.length){
-    playbackIndex=0;
-    timeline.value="0";
-    updatePlaybackTime();
-    return;
-  }
-
-  playbackIndex=Math.max(0,Math.min(currentFrames.length-1,Math.round(index)));
-  const durationMs=getPlaybackDurationMs();
-  const elapsedMs=Math.min(durationMs,currentPlaybackElapsedMs());
-  timeline.value=String(durationMs>0?Math.round((elapsedMs/durationMs)*1000):0);
-
-  redrawParameterCharts();
-  if(updateWave)selectWaveForPlaybackFrame(currentFrames[playbackIndex]);
-  updatePlaybackTime();
-}
-
-function pausePlayback(){
-  if(hasAudio())audioPlayer.pause();
-  if(!playbackRunning)return;
-  playbackElapsedMs=Math.min(getPlaybackDurationMs(),currentPlaybackElapsedMs());
-  playbackRunning=false;
-  cancelAnimationFrame(playbackAnimationId);
-  playbackAnimationId=null;
-  playPauseButton.textContent="▶ Продолжить";
-  playPauseButton.classList.remove("playing");
-  updatePlaybackTime();
-}
-
-function stopPlayback(reset=true){
-  if(playbackRunning){
-    playbackElapsedMs=Math.min(getPlaybackDurationMs(),currentPlaybackElapsedMs());
-  }
-
-  playbackRunning=false;
-  cancelAnimationFrame(playbackAnimationId);
-  playbackAnimationId=null;
-  if(hasAudio())audioPlayer.pause();
-  playPauseButton.textContent="▶ Старт";
-  playPauseButton.classList.remove("playing");
-
-  if(reset){
-    playbackElapsedMs=0;
-    playbackIndex=0;
-    timeline.value="0";
-    if(hasAudio())audioPlayer.currentTime=0;
-  }
-
-  if(currentFrames.length)renderPlaybackIndex(playbackIndex);
-  else updatePlaybackTime();
-}
-
-function playbackTick(now){
-  if(!playbackRunning)return;
-
-  const durationMs=getPlaybackDurationMs();
-  const elapsedMs=Math.min(durationMs,currentPlaybackElapsedMs(now));
-  const index=frameIndexForElapsedMs(elapsedMs);
-
-  if(index!==playbackIndex||now-playbackLastPaintAt>100){
-    playbackIndex=index;
-    playbackLastPaintAt=now;
-    renderPlaybackIndex(index);
-  }else{
-    updatePlaybackTime();
-  }
-
-  const audioEnded=hasAudio() && audioPlayer.ended;
-  if(elapsedMs>=durationMs || audioEnded){
-    playbackElapsedMs=durationMs;
-    playbackRunning=false;
-    playPauseButton.textContent="↻ Сначала";
-    playPauseButton.classList.remove("playing");
-    playbackAnimationId=null;
-    renderPlaybackIndex(currentFrames.length-1);
-    return;
-  }
-
-  playbackAnimationId=requestAnimationFrame(playbackTick);
-}
-
-async function startPlayback(){
-  if(!currentFrames.length)return;
-
-  const durationMs=getPlaybackDurationMs();
-  if(currentPlaybackElapsedMs()>=durationMs-1){
-    playbackElapsedMs=0;
-    playbackIndex=0;
-    if(hasAudio())audioPlayer.currentTime=0;
-    renderPlaybackIndex(0);
-  }
-
-  if(hasAudio()){
-    audioPlayer.playbackRate=Math.max(0.25,Number(speedSelect.value)||1);
-    try{
-      await audioPlayer.play();
-    }catch(error){
-      setStatus(`Не удалось запустить WAV: ${error.message}`,true);
-      return;
-    }
-  }
-
-  playbackRunning=true;
-  playbackStartedAt=performance.now();
-  playbackLastPaintAt=0;
-  playPauseButton.textContent="⏸ Пауза";
-  playPauseButton.classList.add("playing");
-  playbackAnimationId=requestAnimationFrame(playbackTick);
-}
-
-function resetPlaybackForFrames(){
-  playbackRunning=false;
-  cancelAnimationFrame(playbackAnimationId);
-  playbackAnimationId=null;
-  playbackElapsedMs=0;
-  playbackIndex=0;
-  timeline.value="0";
-  if(hasAudio())audioPlayer.currentTime=0;
-  playPauseButton.textContent="▶ Старт";
-  playPauseButton.classList.remove("playing");
-  updatePlaybackTime();
-}
-
-
-function drawWave(frame){
-  const canvas=document.getElementById("cWave");
-  const {ctx,width,height}=setupCanvas(canvas);
-  ctx.clearRect(0,0,width,height);
-  const values=frame?.waveK||[];
-  const pad={left:64,right:18,top:18,bottom:42};
-  const plotW=Math.max(1,width-pad.left-pad.right);
-  const plotH=Math.max(1,height-pad.top-pad.bottom);
-
-  if(!values.length){
-    ctx.fillStyle="#9aa7c7";ctx.font="14px system-ui";
-    ctx.fillText("У выбранного кадра WAVE_K отсутствует",pad.left,pad.top+20);
-    return;
-  }
-
-  let minY=Math.min(...values),maxY=Math.max(...values);
-  if(minY===maxY){minY-=1;maxY+=1;}
-  const ySpan=maxY-minY;
-  const xSpan=Math.max(1,values.length-1);
-  const xToPx=x=>pad.left+(x/xSpan)*plotW;
-  const yToPx=y=>pad.top+plotH-((y-minY)/ySpan)*plotH;
-
-  ctx.strokeStyle="rgba(154,167,199,.15)";ctx.fillStyle="#9aa7c7";ctx.font="12px system-ui";
-  ctx.textAlign="right";ctx.textBaseline="middle";
-  for(let i=0;i<=5;i++){
-    const y=pad.top+(plotH/5)*i;
-    const v=maxY-(ySpan/5)*i;
-    ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(width-pad.right,y);ctx.stroke();
-    ctx.fillText(niceNumber(v),pad.left-8,y);
-  }
-
-  ctx.strokeStyle="#6ee7b7";ctx.lineWidth=1.8;ctx.beginPath();
-  values.forEach((v,i)=>{
-    const x=xToPx(i),y=yToPx(v);
-    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
-  });
-  ctx.stroke();
-
-  hoverInfo.set(canvas,{
-    wave:true,frame,values,minY,maxY,pad,plotW,plotH
-  });
-}
-
-function renderSummary(frames){
-  const tones=[...new Set(frames.map(f=>f.tone))];
-  const waves=frames.filter(f=>f.waveK.length).length;
-  document.getElementById("sFrames").textContent=frames.length.toLocaleString("ru-RU");
-  document.getElementById("sFirst").textContent=frames[0]?.frame??"—";
-  document.getElementById("sLast").textContent=frames.at(-1)?.frame??"—";
-  document.getElementById("sCount").textContent=frames.length?mode(frames.map(f=>f.count)):"—";
-  document.getElementById("sTones").textContent=tones.length?tones.join(", "):"—";
-  document.getElementById("sWave").textContent=`${waves} / ${frames.length}`;
-}
-
-function fillWaveSelect(frames){
-  waveFrames=frames.filter(f=>f.waveK.length);
-  waveSelect.innerHTML="";
-  waveFrames.forEach((f,i)=>{
-    const o=document.createElement("option");
-    o.value=String(i);
-    o.textContent=`FRAME ${f.frame} · ${f.waveK.length} точек · tone=${f.tone}`;
-    waveSelect.append(o);
-  });
-  waveSelect.disabled=!waveFrames.length;
-  drawWave(waveFrames[0]||null);
-}
-
-function renderFrames(frames){
-  currentFrames=frames;
-  resetPlaybackForFrames();
-  renderSummary(frames);
-  drawChart("cFrame",frames,"frame","FRAME");
-  drawChart("cCount",frames,"count","count");
-  drawChart("cMean",frames,"mean","mean");
-  drawChart("cLevel",frames,"level","level");
-  drawChart("cP2p",frames,"p2p","p2p");
-  drawChart("cZc",frames,"zc","zc");
-  drawChart("cF400",frames,"f400","f400");
-  drawChart("cF1000",frames,"f1000","f1000");
-  drawChart("cTone",frames,"tone","tone",true);
-  fillWaveSelect(frames);
-}
-
-function loadText(text,name){
-  blocks=parseLog(text);
-  if(!blocks.length){
-    setStatus(`В ${name} не найдено полных строк FRAME.`,true);
-    renderFrames([]);
-    return;
-  }
-
-  blockSelect.innerHTML="";
-  blocks.forEach((b,i)=>{
-    const o=document.createElement("option");
-    o.value=String(i);
-    o.textContent=`${i+1}. ${b.label} · ${b.frames.length} FRAME`;
-    blockSelect.append(o);
-  });
-  blockSelect.disabled=blocks.length<2;
-  if(Number.isFinite(blocks[0].timeValue)&&blocks[0].timeValue>0){
-    durationInput.value=String(blocks[0].timeValue);
-  }
-  renderFrames(blocks[0].frames);
-
-  const total=blocks.reduce((s,b)=>s+b.frames.length,0);
-  setStatus(`${name}: найдено ${blocks.length} период(а), ${total} кадров FRAME.`);
-}
-
-function drawTooltip(canvas,event){
-  const info=hoverInfo.get(canvas);
-  if(!info)return;
-
-  // Перерисовываем базовый график и добавляем подсказку.
-  if(info.wave){
-    drawWave(info.frame);
-  }else{
-    drawChart(canvas.id,info.frames,info.field,info.title,info.toneAxis);
-  }
-  const fresh=hoverInfo.get(canvas);
-  const rect=canvas.getBoundingClientRect();
-  const mx=event.clientX-rect.left;
-  const my=event.clientY-rect.top;
-  const ctx=canvas.getContext("2d");
-
-  if(fresh.wave){
-    const {values,pad,plotW,plotH,minY,maxY}=fresh;
-    if(mx<pad.left||mx>pad.left+plotW||my<pad.top||my>pad.top+plotH)return;
-    const index=Math.max(0,Math.min(values.length-1,Math.round(((mx-pad.left)/plotW)*(values.length-1))));
-    const x=pad.left+(index/Math.max(1,values.length-1))*plotW;
-    const y=pad.top+plotH-((values[index]-minY)/(maxY-minY))*plotH;
-    tooltipBox(ctx,x,y,`Точка ${index}`,String(values[index]),rect.width);
-  }else{
-    const {frames,field,toneAxis,minX,maxX,minY,maxY,pad,plotW,plotH}=fresh;
-    if(mx<pad.left||mx>pad.left+plotW||my<pad.top||my>pad.top+plotH)return;
-    const frameValue=minX+((mx-pad.left)/plotW)*(maxX-minX);
-    let nearest=frames[0];
-    for(const f of frames){
-      if(Math.abs(f.frame-frameValue)<Math.abs(nearest.frame-frameValue))nearest=f;
-    }
-    const yVal=field==="frame"?nearest.frame:(field==="tone"?(toneMap[nearest.tone]??3):nearest[field]);
-    const x=pad.left+((nearest.frame-minX)/Math.max(1,maxX-minX))*plotW;
-    const y=pad.top+plotH-((yVal-minY)/Math.max(1e-9,maxY-minY))*plotH;
-    const value=toneAxis?(toneNames[yVal]??String(yVal)):String(yVal);
-    tooltipBox(ctx,x,y,`FRAME ${nearest.frame}`,`${field}: ${value}`,rect.width);
-  }
-}
-
-function tooltipBox(ctx,x,y,line1,line2,width){
-  ctx.fillStyle="#fbbf24";ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();
-  ctx.font="12px system-ui";
-  const w=Math.max(ctx.measureText(line1).width,ctx.measureText(line2).width)+18;
-  const h=44;
-  let bx=x+10;
-  if(bx+w>width-8)bx=x-w-10;
-  let by=Math.max(6,y-h-10);
-  ctx.fillStyle="rgba(5,10,22,.94)";
-  ctx.strokeStyle="#2a365c";
-  ctx.lineWidth=1;
-  ctx.beginPath();ctx.roundRect(bx,by,w,h,8);ctx.fill();ctx.stroke();
-  ctx.fillStyle="#edf2ff";ctx.textAlign="left";ctx.textBaseline="top";
-  ctx.fillText(line1,bx+9,by+7);
-  ctx.fillStyle="#9aa7c7";ctx.fillText(line2,bx+9,by+23);
-}
-
-document.querySelectorAll("canvas").forEach(canvas=>{
-  canvas.addEventListener("mousemove",e=>drawTooltip(canvas,e));
-  canvas.addEventListener("mouseleave",()=>{
-    const info=hoverInfo.get(canvas);
-    if(!info)return;
-    if(info.wave)drawWave(info.frame);
-    else drawChart(canvas.id,info.frames,info.field,info.title,info.toneAxis);
-  });
-});
-
-blockSelect.addEventListener("change",()=>{
-  const b=blocks[Number(blockSelect.value)];
-  if(b){
-    if(Number.isFinite(b.timeValue)&&b.timeValue>0)durationInput.value=String(b.timeValue);
-    renderFrames(b.frames);
-    setStatus(`Показан период: ${b.label}.`);
-  }
-});
-
-waveSelect.addEventListener("change",()=>drawWave(waveFrames[Number(waveSelect.value)]||null));
-
-document.getElementById("prevWave").addEventListener("click",()=>{
-  if(!waveFrames.length)return;
-  let i=Number(waveSelect.value||0)-1;
-  if(i<0)i=waveFrames.length-1;
-  waveSelect.value=String(i);
-  drawWave(waveFrames[i]);
-});
-
-function setAudioFile(file){
-  if(audioObjectUrl)URL.revokeObjectURL(audioObjectUrl);
-  audioObjectUrl=URL.createObjectURL(file);
-  audioPlayer.src=audioObjectUrl;
-  audioState.textContent=`WAV: ${file.name}`;
-  audioPlayer.load();
-}
-
-async function loadDefaultPair(){
-  const stamp=Date.now();
-  try{
-    const response=await fetch(`data/000.log?t=${stamp}`,{cache:"no-store"});
-    if(!response.ok)throw new Error(`LOG HTTP ${response.status}`);
-    loadText(await response.text(),"data/000.log");
-
-    audioPlayer.src=`data/000.wav?t=${stamp}`;
-    audioPlayer.load();
-    audioState.textContent="WAV: data/000.wav";
-    setStatus("Загружена синхронная пара data/000.log + data/000.wav.");
-  }catch(error){
-    setStatus(`Не удалось загрузить data/000.*: ${error.message}`,true);
-  }
-}
-
-fileInput.addEventListener("change",async e=>{
-  const file=e.target.files?.[0];
-  if(!file)return;
-  loadText(await file.text(),file.name);
-});
-
-audioInput.addEventListener("change",event=>{
-  const file=event.target.files?.[0];
-  if(file)setAudioFile(file);
-});
-
-audioPlayer.addEventListener("loadedmetadata",()=>{
-  if(Number.isFinite(audioPlayer.duration)&&audioPlayer.duration>0){
-    durationInput.value=String(audioPlayer.duration.toFixed(3));
-  }
-  audioPlayer.playbackRate=Math.max(0.25,Number(speedSelect.value)||1);
-  updatePlaybackTime();
-});
-
-audioPlayer.addEventListener("timeupdate",()=>{
-  if(!playbackRunning)return;
-  const elapsedMs=audioPlayer.currentTime*1000;
-  const index=frameIndexForElapsedMs(elapsedMs);
-  if(index!==playbackIndex)renderPlaybackIndex(index);
-});
-
-audioPlayer.addEventListener("ended",()=>{
-  playbackRunning=false;
-  cancelAnimationFrame(playbackAnimationId);
-  playbackAnimationId=null;
-  playbackElapsedMs=getPlaybackDurationMs();
-  playPauseButton.textContent="↻ Сначала";
-  playPauseButton.classList.remove("playing");
-  renderPlaybackIndex(currentFrames.length-1);
-});
-
-loadPairButton.addEventListener("click",loadDefaultPair);
-
-clearAudioButton.addEventListener("click",()=>{
-  stopPlayback(true);
-  audioPlayer.removeAttribute("src");
-  audioPlayer.load();
-  audioInput.value="";
-  audioState.textContent="WAV ещё не выбран";
-  if(audioObjectUrl){
-    URL.revokeObjectURL(audioObjectUrl);
-    audioObjectUrl=null;
-  }
-  updatePlaybackTime();
-});
-
-document.getElementById("embeddedButton").addEventListener("click",()=>{
-  fileInput.value="";
-  loadText(EMBEDDED_LOG,"встроенный 000.log");
-});
-
-
-playPauseButton.addEventListener("click",()=>{
-  if(playbackRunning)pausePlayback();
-  else startPlayback();
-});
-
-stopButton.addEventListener("click",()=>stopPlayback(true));
-
-timeline.addEventListener("input",()=>{
-  if(playbackRunning)pausePlayback();
-  const progress=Number(timeline.value)/1000;
-  playbackElapsedMs=progress*getPlaybackDurationMs();
-  if(hasAudio())audioPlayer.currentTime=playbackElapsedMs/1000;
-  const index=frameIndexForElapsedMs(playbackElapsedMs);
-  renderPlaybackIndex(index);
-});
-
-durationInput.addEventListener("change",()=>{
-  const value=Math.max(0.1,Number(durationInput.value)||60);
-  durationInput.value=String(value);
-  stopPlayback(true);
-});
-
-speedSelect.addEventListener("change",()=>{
-  if(hasAudio())audioPlayer.playbackRate=Math.max(0.25,Number(speedSelect.value)||1);
-  if(playbackRunning && !hasAudio()){
-    playbackElapsedMs=Math.min(getPlaybackDurationMs(),currentPlaybackElapsedMs());
-    playbackStartedAt=performance.now();
-  }
-  updatePlaybackTime();
-});
-
-window.addEventListener("resize",()=>{
-  redrawParameterCharts();
-  drawWave(waveFrames[Number(waveSelect.value)]||null);
-});
-
-loadText(EMBEDDED_LOG,"встроенный 000.log");
-</script>
+
+      <section class="panel">
+        <div class="panel__header">
+          <div>
+            <h2>История громкости</h2>
+            <p>
+              Уровень звука во времени
+            </p>
+          </div>
+
+          <strong id="historyRangeText">
+            30 секунд
+          </strong>
+        </div>
+
+        <canvas
+          id="historyCanvas"
+          class="canvas-history"
+        ></canvas>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <div>
+            <h2>Осциллограмма</h2>
+            <p>
+              Форма текущего звукового окна
+            </p>
+          </div>
+
+          <strong id="waveScaleText">
+            ×1.0
+          </strong>
+        </div>
+
+        <canvas
+          id="waveCanvas"
+          class="canvas-wave"
+        ></canvas>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <div>
+            <h2>Спектр</h2>
+            <p id="spectrumRangeText">
+              125–7875 Гц
+            </p>
+          </div>
+
+          <strong id="spectrumMaximumText">
+            максимум 0
+          </strong>
+        </div>
+
+        <canvas
+          id="spectrumCanvas"
+          class="canvas-spectrum"
+        ></canvas>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <div>
+            <h2>Спектрограмма</h2>
+            <p>
+              Частота по вертикали, время движется слева направо
+            </p>
+          </div>
+
+          <strong id="spectrogramScaleText">
+            0–1000
+          </strong>
+        </div>
+
+        <canvas
+          id="spectrogramCanvas"
+          class="canvas-spectrogram"
+        ></canvas>
+
+        <div class="spectrogram-legend">
+          <span>Слабый</span>
+
+          <div class="spectrogram-legend__gradient"></div>
+
+          <span>Сильный</span>
+        </div>
+      </section>
+    </section>
+
+    <aside class="settings">
+      <div class="settings__header">
+        <div>
+          <h2>Настройки</h2>
+          <p>
+            Применяются сразу и сохраняются в браузере
+          </p>
+        </div>
+
+        <span
+          id="pauseState"
+          class="pause-state"
+        >
+          LIVE
+        </span>
+      </div>
+
+      <details open>
+        <summary>Громкость</summary>
+
+        <label>
+          Минимальный RMS
+          <input
+            id="rmsMinimum"
+            type="number"
+            min="1"
+            step="100"
+          >
+        </label>
+
+        <label>
+          Максимальный RMS
+          <input
+            id="rmsMaximum"
+            type="number"
+            min="1000"
+            step="1000"
+          >
+        </label>
+
+        <label>
+          История, секунд
+          <input
+            id="historySeconds"
+            type="range"
+            min="5"
+            max="120"
+            step="5"
+          >
+          <output id="historySecondsValue"></output>
+        </label>
+
+        <label>
+          Сглаживание уровня
+          <input
+            id="levelSmoothing"
+            type="range"
+            min="0"
+            max="0.95"
+            step="0.05"
+          >
+          <output id="levelSmoothingValue"></output>
+        </label>
+      </details>
+
+      <details open>
+        <summary>Осциллограмма</summary>
+
+        <label>
+          Усиление
+          <input
+            id="waveGain"
+            type="range"
+            min="0.2"
+            max="8"
+            step="0.1"
+          >
+          <output id="waveGainValue"></output>
+        </label>
+
+        <label class="checkbox-label">
+          <input
+            id="waveAutoScale"
+            type="checkbox"
+          >
+          Автоматический масштаб
+        </label>
+      </details>
+
+      <details open>
+        <summary>Спектр</summary>
+
+        <label>
+          Минимальная частота
+          <input
+            id="frequencyMinimum"
+            type="number"
+            min="0"
+            max="8000"
+            step="125"
+          >
+        </label>
+
+        <label>
+          Максимальная частота
+          <input
+            id="frequencyMaximum"
+            type="number"
+            min="125"
+            max="8000"
+            step="125"
+          >
+        </label>
+
+        <label>
+          Усиление
+          <input
+            id="spectrumGain"
+            type="range"
+            min="0.2"
+            max="5"
+            step="0.1"
+          >
+          <output id="spectrumGainValue"></output>
+        </label>
+
+        <label>
+          Сглаживание
+          <input
+            id="spectrumSmoothing"
+            type="range"
+            min="0"
+            max="0.95"
+            step="0.05"
+          >
+          <output id="spectrumSmoothingValue"></output>
+        </label>
+
+        <label>
+          Спад удержания пиков
+          <input
+            id="peakDecay"
+            type="range"
+            min="1"
+            max="80"
+            step="1"
+          >
+          <output id="peakDecayValue"></output>
+        </label>
+
+        <label class="checkbox-label">
+          <input
+            id="peakHoldEnabled"
+            type="checkbox"
+          >
+          Показывать удержание пиков
+        </label>
+      </details>
+
+      <details open>
+        <summary>Спектрограмма</summary>
+
+        <label>
+          Нижний порог цвета
+          <input
+            id="spectrogramMinimum"
+            type="range"
+            min="0"
+            max="900"
+            step="10"
+          >
+          <output id="spectrogramMinimumValue"></output>
+        </label>
+
+        <label>
+          Верхний порог цвета
+          <input
+            id="spectrogramMaximum"
+            type="range"
+            min="100"
+            max="1000"
+            step="10"
+          >
+          <output id="spectrogramMaximumValue"></output>
+        </label>
+
+        <label>
+          Усиление цвета
+          <input
+            id="spectrogramGain"
+            type="range"
+            min="0.2"
+            max="5"
+            step="0.1"
+          >
+          <output id="spectrogramGainValue"></output>
+        </label>
+      </details>
+
+      <div class="settings__buttons">
+        <button id="pauseButton">
+          Пауза
+        </button>
+
+        <button id="clearButton">
+          Очистить
+        </button>
+
+        <button
+          id="resetButton"
+          class="button-secondary"
+        >
+          Сбросить настройки
+        </button>
+      </div>
+
+      <section class="diagnostics">
+        <h3>Диагностика</h3>
+
+        <dl>
+          <div>
+            <dt>Кадр ESP32</dt>
+            <dd id="frameValue">0</dd>
+          </div>
+
+          <div>
+            <dt>Mean</dt>
+            <dd id="meanValue">0</dd>
+          </div>
+
+          <div>
+            <dt>Min / Max</dt>
+            <dd id="minimumMaximumValue">0 / 0</dd>
+          </div>
+
+          <div>
+            <dt>Кадров браузером</dt>
+            <dd id="receivedFramesValue">0</dd>
+          </div>
+
+          <div>
+            <dt>Web FPS</dt>
+            <dd id="webFpsValue">0</dd>
+          </div>
+        </dl>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
 </body>
 </html>

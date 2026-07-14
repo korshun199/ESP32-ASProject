@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# Запускает веб-панель живого звукового радара.
+
+set -euo pipefail
+
+cd /home/work/ESP32-ASProject
+
+VENV="web/.venv"
+
+if [[ ! -x "$VENV/bin/python" ]]; then
+  echo "Создаём виртуальное окружение."
+  python3 -m venv "$VENV"
+fi
+
+echo "Устанавливаем зависимости."
+"$VENV/bin/python" -m pip install --quiet --upgrade pip
+"$VENV/bin/python" -m pip install --quiet -r web/requirements.txt
+
+echo
+echo "Веб-панель:"
+echo "http://127.0.0.1:8080"
+echo
+echo "Для остановки нажми CTRL+C."
+echo
+
+exec "$VENV/bin/python" web/server.py \
+  --port /dev/ttyACM0 \
+  --baudrate 115200 \
+  --host 127.0.0.1 \
+  --http-port 8080
