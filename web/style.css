@@ -98,13 +98,14 @@ input {
     minmax(0, 1fr)
     325px;
   gap: 18px;
-  max-width: 1800px;
+  max-width: 2800px;
   margin: 0 auto;
   padding: 18px;
 }
 
 .dashboard {
   min-width: 0;
+  max-width: 2000px;
 }
 
 .cards {
@@ -188,19 +189,19 @@ input {
 .panel h2,
 .settings h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .panel p,
 .settings p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .panel__header strong {
   color: var(--accent);
-  font-size: 13px;
+  font-size: 16px;
   white-space: nowrap;
 }
 
@@ -259,6 +260,7 @@ canvas {
   top: 91px;
   align-self: start;
   max-height: calc(100vh - 109px);
+  max-width: 400px;
   overflow: auto;
   padding: 16px;
 }
