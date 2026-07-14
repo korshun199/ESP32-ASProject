@@ -2,18 +2,27 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1"
   >
+
   <meta
     name="theme-color"
     content="#08111f"
   >
+
   <title>ESP32 Audio Radar</title>
+
   <link
     rel="stylesheet"
     href="/static/style.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="/static/recorder.css"
   >
 </head>
 
@@ -21,6 +30,7 @@
   <header class="topbar">
     <div>
       <h1>ESP32 Audio Radar</h1>
+
       <p>
         Осциллограмма, спектр и история звука в реальном времени
       </p>
@@ -43,7 +53,10 @@
       <div class="cards">
         <article class="card card-level">
           <span>Текущий уровень</span>
-          <strong id="levelValue">0%</strong>
+
+          <strong id="levelValue">
+            0%
+          </strong>
 
           <div class="level-meter">
             <div id="levelMeterFill"></div>
@@ -52,27 +65,42 @@
 
         <article class="card">
           <span>RMS</span>
-          <strong id="rmsValue">0</strong>
+
+          <strong id="rmsValue">
+            0
+          </strong>
         </article>
 
         <article class="card">
           <span>Peak</span>
-          <strong id="peakValue">0</strong>
+
+          <strong id="peakValue">
+            0
+          </strong>
         </article>
 
         <article class="card">
           <span>P2P</span>
-          <strong id="p2pValue">0</strong>
+
+          <strong id="p2pValue">
+            0
+          </strong>
         </article>
 
         <article class="card">
           <span>Доминирующая полоса</span>
-          <strong id="frequencyValue">0 Гц</strong>
+
+          <strong id="frequencyValue">
+            0 Гц
+          </strong>
         </article>
 
         <article class="card">
           <span>FPS / ошибки</span>
-          <strong id="fpsValue">0 / 0</strong>
+
+          <strong id="fpsValue">
+            0 / 0
+          </strong>
         </article>
       </div>
 
@@ -80,6 +108,7 @@
         <div class="panel__header">
           <div>
             <h2>История громкости</h2>
+
             <p>
               Уровень звука во времени
             </p>
@@ -100,6 +129,7 @@
         <div class="panel__header">
           <div>
             <h2>Осциллограмма</h2>
+
             <p>
               Форма текущего звукового окна
             </p>
@@ -120,6 +150,7 @@
         <div class="panel__header">
           <div>
             <h2>Спектр</h2>
+
             <p id="spectrumRangeText">
               125–7875 Гц
             </p>
@@ -140,6 +171,7 @@
         <div class="panel__header">
           <div>
             <h2>Спектрограмма</h2>
+
             <p>
               Частота по вертикали, время движется слева направо
             </p>
@@ -169,6 +201,7 @@
       <div class="settings__header">
         <div>
           <h2>Настройки</h2>
+
           <p>
             Применяются сразу и сохраняются в браузере
           </p>
@@ -182,11 +215,114 @@
         </span>
       </div>
 
+      <section class="recorder">
+        <div class="recorder__header">
+          <div>
+            <h3>Запись сеанса</h3>
+
+            <p>
+              Сохраняет измерения и спектр
+            </p>
+          </div>
+
+          <span
+            id="recorderState"
+            class="recorder__state"
+          >
+            ГОТОВ
+          </span>
+        </div>
+
+        <label>
+          Название сеанса
+
+          <input
+            id="sessionName"
+            type="text"
+            maxlength="80"
+            placeholder="Например: речь у микрофона"
+          >
+        </label>
+
+        <div class="recorder__stats">
+          <div>
+            <span>Время</span>
+
+            <strong id="recordingTime">
+              00:00
+            </strong>
+          </div>
+
+          <div>
+            <span>Кадры</span>
+
+            <strong id="recordingFrames">
+              0
+            </strong>
+          </div>
+        </div>
+
+        <div class="recorder__buttons">
+          <button
+            id="recordStartButton"
+            class="recorder__start"
+          >
+            Начать запись
+          </button>
+
+          <button
+            id="recordStopButton"
+            class="recorder__stop"
+            disabled
+          >
+            Остановить
+          </button>
+        </div>
+
+        <div class="recorder__exports">
+          <button
+            id="exportJsonButton"
+            disabled
+          >
+            JSON
+          </button>
+
+          <button
+            id="exportCsvButton"
+            disabled
+          >
+            CSV
+          </button>
+
+          <button
+            id="exportPngButton"
+          >
+            Спектрограмма PNG
+          </button>
+        </div>
+
+        <div
+          id="recorderMessage"
+          class="recorder__message"
+        >
+          Данные пока не записаны
+        </div>
+
+        <details class="recorder__journal">
+          <summary>
+            Последние записи
+          </summary>
+
+          <ol id="recordingJournal"></ol>
+        </details>
+      </section>
+
       <details open>
         <summary>Громкость</summary>
 
         <label>
           Минимальный RMS
+
           <input
             id="rmsMinimum"
             type="number"
@@ -197,6 +333,7 @@
 
         <label>
           Максимальный RMS
+
           <input
             id="rmsMaximum"
             type="number"
@@ -207,6 +344,7 @@
 
         <label>
           История, секунд
+
           <input
             id="historySeconds"
             type="range"
@@ -214,11 +352,13 @@
             max="120"
             step="5"
           >
+
           <output id="historySecondsValue"></output>
         </label>
 
         <label>
           Сглаживание уровня
+
           <input
             id="levelSmoothing"
             type="range"
@@ -226,6 +366,7 @@
             max="0.95"
             step="0.05"
           >
+
           <output id="levelSmoothingValue"></output>
         </label>
       </details>
@@ -235,6 +376,7 @@
 
         <label>
           Усиление
+
           <input
             id="waveGain"
             type="range"
@@ -242,6 +384,7 @@
             max="8"
             step="0.1"
           >
+
           <output id="waveGainValue"></output>
         </label>
 
@@ -250,6 +393,7 @@
             id="waveAutoScale"
             type="checkbox"
           >
+
           Автоматический масштаб
         </label>
       </details>
@@ -259,6 +403,7 @@
 
         <label>
           Минимальная частота
+
           <input
             id="frequencyMinimum"
             type="number"
@@ -270,6 +415,7 @@
 
         <label>
           Максимальная частота
+
           <input
             id="frequencyMaximum"
             type="number"
@@ -281,6 +427,7 @@
 
         <label>
           Усиление
+
           <input
             id="spectrumGain"
             type="range"
@@ -288,11 +435,13 @@
             max="5"
             step="0.1"
           >
+
           <output id="spectrumGainValue"></output>
         </label>
 
         <label>
           Сглаживание
+
           <input
             id="spectrumSmoothing"
             type="range"
@@ -300,11 +449,13 @@
             max="0.95"
             step="0.05"
           >
+
           <output id="spectrumSmoothingValue"></output>
         </label>
 
         <label>
           Спад удержания пиков
+
           <input
             id="peakDecay"
             type="range"
@@ -312,6 +463,7 @@
             max="80"
             step="1"
           >
+
           <output id="peakDecayValue"></output>
         </label>
 
@@ -320,6 +472,7 @@
             id="peakHoldEnabled"
             type="checkbox"
           >
+
           Показывать удержание пиков
         </label>
       </details>
@@ -329,6 +482,7 @@
 
         <label>
           Нижний порог цвета
+
           <input
             id="spectrogramMinimum"
             type="range"
@@ -336,11 +490,13 @@
             max="900"
             step="10"
           >
+
           <output id="spectrogramMinimumValue"></output>
         </label>
 
         <label>
           Верхний порог цвета
+
           <input
             id="spectrogramMaximum"
             type="range"
@@ -348,11 +504,13 @@
             max="1000"
             step="10"
           >
+
           <output id="spectrogramMaximumValue"></output>
         </label>
 
         <label>
           Усиление цвета
+
           <input
             id="spectrogramGain"
             type="range"
@@ -360,6 +518,7 @@
             max="5"
             step="0.1"
           >
+
           <output id="spectrogramGainValue"></output>
         </label>
       </details>
@@ -387,27 +546,42 @@
         <dl>
           <div>
             <dt>Кадр ESP32</dt>
-            <dd id="frameValue">0</dd>
+
+            <dd id="frameValue">
+              0
+            </dd>
           </div>
 
           <div>
             <dt>Mean</dt>
-            <dd id="meanValue">0</dd>
+
+            <dd id="meanValue">
+              0
+            </dd>
           </div>
 
           <div>
             <dt>Min / Max</dt>
-            <dd id="minimumMaximumValue">0 / 0</dd>
+
+            <dd id="minimumMaximumValue">
+              0 / 0
+            </dd>
           </div>
 
           <div>
             <dt>Кадров браузером</dt>
-            <dd id="receivedFramesValue">0</dd>
+
+            <dd id="receivedFramesValue">
+              0
+            </dd>
           </div>
 
           <div>
             <dt>Web FPS</dt>
-            <dd id="webFpsValue">0</dd>
+
+            <dd id="webFpsValue">
+              0
+            </dd>
           </div>
         </dl>
       </section>
@@ -415,5 +589,6 @@
   </main>
 
   <script src="/static/app.js"></script>
+  <script src="/static/recorder.js"></script>
 </body>
 </html>
