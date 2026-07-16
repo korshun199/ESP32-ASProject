@@ -1,20 +1,25 @@
 /*
-  ============================================================
-  ESP32 RADAR — УНИВЕРСАЛЬНЫЙ АНАЛИЗАТОР ЗВУКА
-  ============================================================
+  ESP32 RADAR — два микрофона, адаптивное подавление фона.
 
-  Оборудование:
-    ESP32-S3 N16R8
-    TFT ST7789 240x320
-    цифровой микрофон ICS-43434
+  Канал A: направленный микрофон, L/R -> GND.
+  Канал B: открытый микрофон, L/R -> 3.3V.
 
-  Возможности:
-    - чтение любого звука через I2S;
-    - RMS, Peak, P2P, Min, Max и Mean;
-    - логарифмический индикатор громкости;
-    - осциллограмма из 64 точек;
-    - абсолютный спектр из 32 полос;
-    - вывод данных через UART0.
+  Общие линии I2S:
+    BCLK -> GPIO4
+    WS   -> GPIO5
+    SD   -> GPIO6
+
+  Очищенный сигнал:
+    TARGET = DIRECTION_MASK * (A - EFFECTIVE_K * B)
+
+  EFFECTIVE_K зависит от корреляции каналов.
+  DIRECTION_MASK зависит от отношения RMS каналов A/B:
+    0 дБ и ниже -> 0
+    6 дБ и выше -> 1
+    между ними -> плавный переход линейный переход.
+  Точные измеряемые частоты: 400, 1000 и 2000 Гц.
+  Порядок каналов исправлен: A=LEFT направленный, B=RIGHT открытый.
+  Для теста отправить любой печатный символ в монитор порта.
 */
 
 #include <Arduino.h>
@@ -25,933 +30,961 @@
 #include <math.h>
 #include <stdint.h>
 
-// ============================================================
-// TFT ST7789
-// ============================================================
-
-static const int TFT_CS_PIN   = 10;
-static const int TFT_DC_PIN   = 9;
-static const int TFT_RST_PIN  = 8;
+// TFT ST7789.
+static const int TFT_CS_PIN = 10;
+static const int TFT_DC_PIN = 9;
+static const int TFT_RST_PIN = 8;
 static const int TFT_MOSI_PIN = 11;
 static const int TFT_SCLK_PIN = 12;
 
-Adafruit_ST7789 tft(
-  TFT_CS_PIN,
-  TFT_DC_PIN,
-  TFT_RST_PIN
-);
+Adafruit_ST7789 tft(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
-// ============================================================
-// МИКРОФОН ICS-43434
-// ============================================================
-
+// I2S.
 static const int I2S_BCLK_PIN = 4;
-static const int I2S_WS_PIN   = 5;
+static const int I2S_WS_PIN = 5;
 static const int I2S_DATA_PIN = 6;
+static const i2s_port_t I2S_PORT = I2S_NUM_0;
+static const bool SWAP_CHANNELS = false;
 
-static const i2s_port_t I2S_PORT =
-  I2S_NUM_0;
-
-// ============================================================
-// ПАРАМЕТРЫ АНАЛИЗА
-// ============================================================
-
+// Анализ.
 static const int SAMPLE_RATE = 16000;
 static const int READ_SAMPLES = 512;
-
 static const int WAVE_POINTS = 64;
 static const int SPECTRUM_BANDS = 32;
-
+static const int MAX_LAG_SAMPLES = 8;
 static const int WARMUP_BUFFERS = 8;
-
-// Serial примерно 8 раз в секунду.
-static const int SERIAL_EVERY_FRAMES = 3;
-
-// TFT примерно 4 раза в секунду.
+static const int SERIAL_EVERY_FRAMES = 6;
 static const int TFT_EVERY_FRAMES = 6;
 
-// Центры спектральных полос: 125, 375 ... 7875 Гц.
-static const float SPECTRUM_FIRST_HZ =
-  125.0f;
+static const float TEST_TONE_400_HZ = 400.0f;
+static const float TEST_TONE_1000_HZ = 1000.0f;
+static const float TEST_TONE_2000_HZ = 2000.0f;
+static const float SPECTRUM_FIRST_HZ = 125.0f;
+static const float SPECTRUM_STEP_HZ = 250.0f;
 
-static const float SPECTRUM_STEP_HZ =
-  250.0f;
+static const float RMS_SCALE_MIN = 5000.0f;
+static const float RMS_SCALE_MAX = 700000.0f;
+static const float SPECTRUM_SCALE_MIN = 300.0f;
+static const float SPECTRUM_SCALE_MAX = 150000.0f;
+static const int32_t CLIP_THRESHOLD = 7500000;
 
-// Диапазон логарифмического индикатора громкости.
-static const float RMS_SCALE_MIN =
-  5000.0f;
+// Адаптация коэффициента усиления.
+static const float GAIN_UPDATE_CORRELATION = 0.85f;
+static const float GAIN_MIN = 0.20f;
+static const float GAIN_MAX = 5.00f;
+static const float GAIN_SMOOTHING = 0.02f;
+static const int32_t GAIN_UPDATE_MIN_RMS = 6000;
 
-static const float RMS_SCALE_MAX =
-  700000.0f;
+// Маска подавления.
+// При корреляции <= 0.25 фон не вычитается.
+// При корреляции >= 0.85 применяется полный коэффициент K.
+static const float MASK_CORRELATION_LOW = 0.25f;
+static const float MASK_CORRELATION_HIGH = 0.85f;
 
-// Диапазон абсолютной шкалы спектра.
-static const float SPECTRUM_SCALE_MIN =
-  300.0f;
+// Мягкий направленный затвор по отношению RMS A/B.
+static const float DIRECTION_DB_LOW = 0.0f;
+static const float DIRECTION_DB_HIGH = 6.0f;
 
-static const float SPECTRUM_SCALE_MAX =
-  150000.0f;
-
-// Порог приближения к пределу 24-битного сигнала.
-static const int32_t CLIP_THRESHOLD =
-  7500000;
-
-// ============================================================
-// БУФЕРЫ И ДАННЫЕ
-// ============================================================
-
-int32_t samples[READ_SAMPLES];
+// Буферы.
+int32_t stereoSamples[READ_SAMPLES * 2];
+int32_t samplesA[READ_SAMPLES];
+int32_t samplesB[READ_SAMPLES];
+int32_t samplesTarget[READ_SAMPLES];
 
 struct AudioFrame {
-  uint32_t frameNumber;
-  uint32_t timeMs;
-
-  int count;
-
   int32_t mean;
   int32_t minimum;
   int32_t maximum;
-
   int32_t rms;
   int32_t peak;
   int32_t p2p;
-
   int levelPercent;
   int clip;
-
+  float tone400Amplitude;
+  uint16_t tone400Level;
+  float tone1000Amplitude;
+  uint16_t tone1000Level;
+  float tone2000Amplitude;
+  uint16_t tone2000Level;
   int16_t wave[WAVE_POINTS];
   uint16_t spectrum[SPECTRUM_BANDS];
-
   float spectrumMaximum;
   float dominantFrequency;
   float dominantAmplitude;
 };
 
-AudioFrame currentFrame;
+struct ComparisonFrame {
+  uint32_t frameNumber;
+  uint32_t timeMs;
+  int count;
+  int bestLag;
+  float correlationRaw;
+  float correlationAligned;
+  float correlationMask;
+  float gainCandidate;
+  float adaptiveGain;
+  float effectiveGain;
+  float rmsRatioAB;
+  float directionDb;
+  float directionMask;
+  float residualRatio;
+  float tone400RatioAB;
+  float tone400TargetRatio;
+  float tone1000RatioAB;
+  float tone1000TargetRatio;
+  float tone2000RatioAB;
+  float tone2000TargetRatio;
+  float commonScore;
+  float directionalScore;
+  float backgroundScore;
+  bool gainUpdated;
+  AudioFrame channelA;
+  AudioFrame channelB;
+  AudioFrame target;
+};
+
+ComparisonFrame currentFrame;
 
 bool micReady = false;
-
 uint32_t frameCounter = 0;
 uint32_t readErrors = 0;
-
 uint32_t fpsStartedAt = 0;
 uint32_t fpsFrameCount = 0;
-
 float currentFps = 0.0f;
+float adaptiveGain = 1.0f;
 
-// ============================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ============================================================
+// Таймер контролируемого теста.
+static const uint32_t TEST_BACKGROUND_END_MS = 10000;
+static const uint32_t TEST_ANGLE_0_END_MS = 20000;
+static const uint32_t TEST_ANGLE_45_END_MS = 30000;
+static const uint32_t TEST_ANGLE_90_END_MS = 40000;
+static const uint32_t TEST_ANGLE_135_END_MS = 50000;
+static const uint32_t TEST_ANGLE_180_END_MS = 60000;
+static const uint32_t TEST_ANGLE_225_END_MS = 70000;
+static const uint32_t TEST_ANGLE_270_END_MS = 80000;
+static const uint32_t TEST_ANGLE_315_END_MS = 90000;
+bool testRunning = false;
+uint32_t testStartedAt = 0;
 
-int clampInt(
-  int value,
-  int minimum,
-  int maximum
-) {
-  if (value < minimum) {
-    return minimum;
-  }
+int clampInt(int value, int minimum, int maximum) {
+  if (value < minimum) return minimum;
+  if (value > maximum) return maximum;
+  return value;
+}
 
-  if (value > maximum) {
-    return maximum;
-  }
-
+float clampFloat(float value, float minimum, float maximum) {
+  if (value < minimum) return minimum;
+  if (value > maximum) return maximum;
   return value;
 }
 
 int32_t absoluteInt32(int32_t value) {
-  if (value == INT32_MIN) {
-    return INT32_MAX;
-  }
-
-  return value < 0
-    ? -value
-    : value;
+  if (value == INT32_MIN) return INT32_MAX;
+  return value < 0 ? -value : value;
 }
 
-// Логарифмическая шкала громкости.
 int rmsToPercent(int32_t rms) {
-  float value =
-    (float)rms;
+  float value = (float)rms;
+  if (value <= RMS_SCALE_MIN) return 0;
+  if (value >= RMS_SCALE_MAX) return 100;
 
-  if (value <= RMS_SCALE_MIN) {
-    return 0;
-  }
+  float currentDb = 20.0f * log10f(value / RMS_SCALE_MIN);
+  float maximumDb = 20.0f * log10f(RMS_SCALE_MAX / RMS_SCALE_MIN);
 
-  if (value >= RMS_SCALE_MAX) {
-    return 100;
-  }
+  return clampInt((int)roundf(currentDb / maximumDb * 100.0f), 0, 100);
+}
 
-  float currentDb =
-    20.0f *
-    log10f(
-      value /
-      RMS_SCALE_MIN
-    );
+uint16_t spectrumAmplitudeToLevel(float amplitude) {
+  if (amplitude <= SPECTRUM_SCALE_MIN) return 0;
+  if (amplitude >= SPECTRUM_SCALE_MAX) return 1000;
 
-  float maximumDb =
-    20.0f *
-    log10f(
-      RMS_SCALE_MAX /
-      RMS_SCALE_MIN
-    );
+  float currentDb = 20.0f * log10f(amplitude / SPECTRUM_SCALE_MIN);
+  float maximumDb = 20.0f * log10f(SPECTRUM_SCALE_MAX / SPECTRUM_SCALE_MIN);
 
-  int percent =
-    (int)roundf(
-      currentDb /
-      maximumDb *
-      100.0f
-    );
-
-  return clampInt(
-    percent,
+  return (uint16_t)clampInt(
+    (int)roundf(currentDb / maximumDb * 1000.0f),
     0,
-    100
+    1000
   );
 }
 
-// Абсолютная логарифмическая шкала спектра.
-uint16_t spectrumAmplitudeToLevel(
-  float amplitude
-) {
-  if (amplitude <= SPECTRUM_SCALE_MIN) {
-    return 0;
-  }
-
-  if (amplitude >= SPECTRUM_SCALE_MAX) {
-    return 1000;
-  }
-
-  float currentDb =
-    20.0f *
-    log10f(
-      amplitude /
-      SPECTRUM_SCALE_MIN
-    );
-
-  float maximumDb =
-    20.0f *
-    log10f(
-      SPECTRUM_SCALE_MAX /
-      SPECTRUM_SCALE_MIN
-    );
-
-  int level =
-    (int)roundf(
-      currentDb /
-      maximumDb *
-      1000.0f
-    );
-
-  return
-    (uint16_t)clampInt(
-      level,
-      0,
-      1000
-    );
-}
-
-void formatCompact(
-  double value,
-  char *buffer,
-  size_t bufferSize
-) {
-  double absoluteValue =
-    fabs(value);
+void formatCompact(double value, char *buffer, size_t bufferSize) {
+  double absoluteValue = fabs(value);
 
   if (absoluteValue >= 1000000.0) {
-    snprintf(
-      buffer,
-      bufferSize,
-      "%.1fM",
-      value / 1000000.0
-    );
+    snprintf(buffer, bufferSize, "%.1fM", value / 1000000.0);
   } else if (absoluteValue >= 1000.0) {
-    snprintf(
-      buffer,
-      bufferSize,
-      "%.1fK",
-      value / 1000.0
-    );
+    snprintf(buffer, bufferSize, "%.1fK", value / 1000.0);
   } else {
-    snprintf(
-      buffer,
-      bufferSize,
-      "%.0f",
-      value
-    );
+    snprintf(buffer, bufferSize, "%.0f", value);
   }
 }
-
-// ============================================================
-// I2S
-// ============================================================
 
 bool setupI2S() {
   i2s_config_t config = {
-    .mode =
-      (i2s_mode_t)(
-        I2S_MODE_MASTER |
-        I2S_MODE_RX
-      ),
-
-    .sample_rate =
-      SAMPLE_RATE,
-
-    .bits_per_sample =
-      I2S_BITS_PER_SAMPLE_32BIT,
-
-    .channel_format =
-      I2S_CHANNEL_FMT_ONLY_LEFT,
-
-    .communication_format =
-      I2S_COMM_FORMAT_STAND_I2S,
-
-    .intr_alloc_flags =
-      ESP_INTR_FLAG_LEVEL1,
-
-    .dma_buf_count =
-      8,
-
-    .dma_buf_len =
-      256,
-
-    .use_apll =
-      false,
-
-    .tx_desc_auto_clear =
-      false,
-
-    .fixed_mclk =
-      0
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+    .sample_rate = SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = 256,
+    .use_apll = false,
+    .tx_desc_auto_clear = false,
+    .fixed_mclk = 0
   };
 
   i2s_pin_config_t pins = {
-    .bck_io_num =
-      I2S_BCLK_PIN,
-
-    .ws_io_num =
-      I2S_WS_PIN,
-
-    .data_out_num =
-      I2S_PIN_NO_CHANGE,
-
-    .data_in_num =
-      I2S_DATA_PIN
+    .bck_io_num = I2S_BCLK_PIN,
+    .ws_io_num = I2S_WS_PIN,
+    .data_out_num = I2S_PIN_NO_CHANGE,
+    .data_in_num = I2S_DATA_PIN
   };
 
-  esp_err_t error =
-    i2s_driver_install(
-      I2S_PORT,
-      &config,
-      0,
-      nullptr
-    );
-
+  esp_err_t error = i2s_driver_install(I2S_PORT, &config, 0, nullptr);
   if (error != ESP_OK) {
-    Serial.printf(
-      "# I2S_DRIVER_ERROR=%d\n",
-      (int)error
-    );
-
+    Serial.printf("# I2S_DRIVER_ERROR=%d\n", (int)error);
     return false;
   }
 
-  error =
-    i2s_set_pin(
-      I2S_PORT,
-      &pins
-    );
-
+  error = i2s_set_pin(I2S_PORT, &pins);
   if (error != ESP_OK) {
-    Serial.printf(
-      "# I2S_PIN_ERROR=%d\n",
-      (int)error
-    );
-
+    Serial.printf("# I2S_PIN_ERROR=%d\n", (int)error);
     return false;
   }
 
-  i2s_zero_dma_buffer(
-    I2S_PORT
-  );
-
+  i2s_zero_dma_buffer(I2S_PORT);
   return true;
 }
 
-void warmUpMicrophone() {
-  for (
-    int bufferNumber = 0;
-    bufferNumber < WARMUP_BUFFERS;
-    bufferNumber++
-  ) {
+void warmUpMicrophones() {
+  for (int bufferNumber = 0; bufferNumber < WARMUP_BUFFERS; bufferNumber++) {
     size_t bytesRead = 0;
-
     i2s_read(
       I2S_PORT,
-      samples,
-      sizeof(samples),
+      stereoSamples,
+      sizeof(stereoSamples),
       &bytesRead,
       pdMS_TO_TICKS(100)
     );
   }
 }
 
-// ============================================================
-// СПЕКТР
-// ============================================================
-
 float calculateBandAmplitude(
+  const int32_t *samples,
   float frequency,
   int count,
   int32_t mean
 ) {
-  const float pi =
-    3.14159265358979323846f;
-
-  float omega =
-    2.0f *
-    pi *
-    frequency /
-    SAMPLE_RATE;
-
-  float coefficient =
-    2.0f *
-    cosf(omega);
+  const float pi = 3.14159265358979323846f;
+  float omega = 2.0f * pi * frequency / SAMPLE_RATE;
+  float coefficient = 2.0f * cosf(omega);
 
   float q0 = 0.0f;
   float q1 = 0.0f;
   float q2 = 0.0f;
 
-  for (
-    int index = 0;
-    index < count;
-    index++
-  ) {
-    float value =
-      (float)(
-        (samples[index] >> 8) -
-        mean
-      );
-
-    q0 =
-      value +
-      coefficient * q1 -
-      q2;
-
+  for (int index = 0; index < count; index++) {
+    float value = (float)(samples[index] - mean);
+    q0 = value + coefficient * q1 - q2;
     q2 = q1;
     q1 = q0;
   }
 
-  float power =
-    q1 * q1 +
-    q2 * q2 -
-    coefficient * q1 * q2;
+  float power = q1 * q1 + q2 * q2 - coefficient * q1 * q2;
+  if (power < 0.0f) power = 0.0f;
 
-  if (power < 0.0f) {
-    power = 0.0f;
-  }
-
-  return
-    2.0f *
-    sqrtf(power) /
-    count;
+  return 2.0f * sqrtf(power) / count;
 }
 
 void calculateSpectrum(
+  const int32_t *samples,
   int count,
-  int32_t mean
+  AudioFrame &frame
 ) {
+  frame.tone400Amplitude = calculateBandAmplitude(
+    samples,
+    TEST_TONE_400_HZ,
+    count,
+    frame.mean
+  );
+  frame.tone1000Amplitude = calculateBandAmplitude(
+    samples,
+    TEST_TONE_1000_HZ,
+    count,
+    frame.mean
+  );
+  frame.tone2000Amplitude = calculateBandAmplitude(
+    samples,
+    TEST_TONE_2000_HZ,
+    count,
+    frame.mean
+  );
+
+  frame.tone400Level = spectrumAmplitudeToLevel(frame.tone400Amplitude);
+  frame.tone1000Level = spectrumAmplitudeToLevel(frame.tone1000Amplitude);
+  frame.tone2000Level = spectrumAmplitudeToLevel(frame.tone2000Amplitude);
+
   float maximumAmplitude = 0.0f;
   float dominantAmplitude = 0.0f;
   float dominantFrequency = 0.0f;
 
-  for (
-    int band = 0;
-    band < SPECTRUM_BANDS;
-    band++
-  ) {
-    float frequency =
-      SPECTRUM_FIRST_HZ +
-      band *
-      SPECTRUM_STEP_HZ;
+  for (int band = 0; band < SPECTRUM_BANDS; band++) {
+    float frequency = SPECTRUM_FIRST_HZ + band * SPECTRUM_STEP_HZ;
+    float amplitude = calculateBandAmplitude(
+      samples,
+      frequency,
+      count,
+      frame.mean
+    );
 
-    float amplitude =
-      calculateBandAmplitude(
-        frequency,
-        count,
-        mean
-      );
+    frame.spectrum[band] = spectrumAmplitudeToLevel(amplitude);
 
-    currentFrame.spectrum[band] =
-      spectrumAmplitudeToLevel(
-        amplitude
-      );
+    if (amplitude > maximumAmplitude) maximumAmplitude = amplitude;
 
-    if (
-      amplitude >
-      maximumAmplitude
-    ) {
-      maximumAmplitude =
-        amplitude;
-    }
-
-    if (
-      amplitude >
-      dominantAmplitude
-    ) {
-      dominantAmplitude =
-        amplitude;
-
-      dominantFrequency =
-        frequency;
+    if (amplitude > dominantAmplitude) {
+      dominantAmplitude = amplitude;
+      dominantFrequency = frequency;
     }
   }
 
-  currentFrame.spectrumMaximum =
-    maximumAmplitude;
-
-  currentFrame.dominantFrequency =
-    dominantFrequency;
-
-  currentFrame.dominantAmplitude =
-    dominantAmplitude;
+  frame.spectrumMaximum = maximumAmplitude;
+  frame.dominantFrequency = dominantFrequency;
+  frame.dominantAmplitude = dominantAmplitude;
 }
 
-// ============================================================
-// ОСЦИЛЛОГРАММА
-// ============================================================
-
 void calculateWave(
+  const int32_t *samples,
   int count,
-  int32_t mean
+  AudioFrame &frame
 ) {
   int32_t maximumAbsolute = 1;
 
-  for (
-    int index = 0;
-    index < count;
-    index++
-  ) {
-    int32_t centered =
-      (samples[index] >> 8) -
-      mean;
-
-    int32_t absoluteValue =
-      absoluteInt32(centered);
-
-    if (
-      absoluteValue >
-      maximumAbsolute
-    ) {
-      maximumAbsolute =
-        absoluteValue;
-    }
+  for (int index = 0; index < count; index++) {
+    int32_t centered = samples[index] - frame.mean;
+    int32_t absoluteValue = absoluteInt32(centered);
+    if (absoluteValue > maximumAbsolute) maximumAbsolute = absoluteValue;
   }
 
-  for (
-    int point = 0;
-    point < WAVE_POINTS;
-    point++
-  ) {
-    int sourceIndex =
-      (
-        point *
-        (count - 1)
-      ) /
-      (
-        WAVE_POINTS - 1
-      );
+  for (int point = 0; point < WAVE_POINTS; point++) {
+    int sourceIndex = point * (count - 1) / (WAVE_POINTS - 1);
+    int32_t centered = samples[sourceIndex] - frame.mean;
+    int32_t normalized = ((int64_t)centered * 1000) / maximumAbsolute;
 
-    int32_t centered =
-      (samples[sourceIndex] >> 8) -
-      mean;
-
-    int32_t normalized =
-      (
-        (int64_t)centered *
-        1000
-      ) /
-      maximumAbsolute;
-
-    currentFrame.wave[point] =
-      (int16_t)clampInt(
-        normalized,
-        -1000,
-        1000
-      );
+    frame.wave[point] = (int16_t)clampInt(normalized, -1000, 1000);
   }
 }
 
-// ============================================================
-// ЧТЕНИЕ МИКРОФОНА
-// ============================================================
+void analyzeChannel(
+  const int32_t *samples,
+  int count,
+  AudioFrame &frame
+) {
+  int64_t sum = 0;
+  int32_t minimumValue = INT32_MAX;
+  int32_t maximumValue = INT32_MIN;
 
-bool readMicrophone() {
-  size_t bytesRead = 0;
+  for (int index = 0; index < count; index++) {
+    int32_t value = samples[index];
+    sum += value;
+    if (value < minimumValue) minimumValue = value;
+    if (value > maximumValue) maximumValue = value;
+  }
 
-  esp_err_t error =
-    i2s_read(
-      I2S_PORT,
-      samples,
-      sizeof(samples),
-      &bytesRead,
-      pdMS_TO_TICKS(100)
+  frame.mean = (int32_t)(sum / count);
+
+  uint64_t squareSum = 0;
+  int32_t peak = 0;
+
+  for (int index = 0; index < count; index++) {
+    int32_t centered = samples[index] - frame.mean;
+    int32_t absoluteValue = absoluteInt32(centered);
+
+    if (absoluteValue > peak) peak = absoluteValue;
+
+    int64_t square = (int64_t)centered * (int64_t)centered;
+    squareSum += (uint64_t)square;
+  }
+
+  frame.minimum = minimumValue;
+  frame.maximum = maximumValue;
+  frame.rms = (int32_t)sqrt((double)squareSum / count);
+  frame.peak = peak;
+  frame.p2p = maximumValue - minimumValue;
+  frame.levelPercent = rmsToPercent(frame.rms);
+  frame.clip = peak >= CLIP_THRESHOLD ? 1 : 0;
+
+  calculateWave(samples, count, frame);
+  calculateSpectrum(samples, count, frame);
+}
+
+float calculateLagCorrelation(
+  const int32_t *a,
+  const int32_t *b,
+  int count,
+  int lag,
+  int32_t meanA,
+  int32_t meanB
+) {
+  int start = lag < 0 ? -lag : 0;
+  int finish = lag > 0 ? count - lag : count;
+
+  if (finish - start < 32) return 0.0f;
+
+  double cross = 0.0;
+  double energyA = 0.0;
+  double energyB = 0.0;
+
+  for (int index = start; index < finish; index++) {
+    int bIndex = index + lag;
+    double valueA = (double)(a[index] - meanA);
+    double valueB = (double)(b[bIndex] - meanB);
+
+    cross += valueA * valueB;
+    energyA += valueA * valueA;
+    energyB += valueB * valueB;
+  }
+
+  double denominator = sqrt(energyA * energyB);
+  if (denominator < 1.0) return 0.0f;
+
+  return clampFloat((float)(cross / denominator), -1.0f, 1.0f);
+}
+
+int findBestLag(
+  const int32_t *a,
+  const int32_t *b,
+  int count,
+  int32_t meanA,
+  int32_t meanB,
+  float &bestCorrelation
+) {
+  int bestLag = 0;
+  bestCorrelation = calculateLagCorrelation(
+    a,
+    b,
+    count,
+    0,
+    meanA,
+    meanB
+  );
+
+  for (int lag = -MAX_LAG_SAMPLES; lag <= MAX_LAG_SAMPLES; lag++) {
+    float correlation = calculateLagCorrelation(
+      a,
+      b,
+      count,
+      lag,
+      meanA,
+      meanB
     );
 
-  if (
-    error != ESP_OK ||
-    bytesRead == 0
-  ) {
+    if (correlation > bestCorrelation) {
+      bestCorrelation = correlation;
+      bestLag = lag;
+    }
+  }
+
+  return bestLag;
+}
+
+float calculateGainCandidate(
+  const int32_t *a,
+  const int32_t *b,
+  int count,
+  int lag,
+  int32_t meanA,
+  int32_t meanB
+) {
+  int start = lag < 0 ? -lag : 0;
+  int finish = lag > 0 ? count - lag : count;
+
+  double cross = 0.0;
+  double energyB = 0.0;
+
+  for (int index = start; index < finish; index++) {
+    int bIndex = index + lag;
+    double valueA = (double)(a[index] - meanA);
+    double valueB = (double)(b[bIndex] - meanB);
+
+    cross += valueA * valueB;
+    energyB += valueB * valueB;
+  }
+
+  if (energyB < 1.0) return adaptiveGain;
+
+  return clampFloat((float)(cross / energyB), GAIN_MIN, GAIN_MAX);
+}
+
+float calculateCorrelationMask(float correlation) {
+  float range = MASK_CORRELATION_HIGH - MASK_CORRELATION_LOW;
+  if (range <= 0.0f) return 0.0f;
+
+  return clampFloat(
+    (correlation - MASK_CORRELATION_LOW) / range,
+    0.0f,
+    1.0f
+  );
+}
+
+float calculateDirectionDb(int32_t rmsA, int32_t rmsB) {
+  float safeA = fmaxf((float)rmsA, 1.0f);
+  float safeB = fmaxf((float)rmsB, 1.0f);
+  return 20.0f * log10f(safeA / safeB);
+}
+
+float calculateDirectionMask(float directionDb) {
+  float range = DIRECTION_DB_HIGH - DIRECTION_DB_LOW;
+  if (range <= 0.0f) return 0.0f;
+
+  float linear = clampFloat(
+    (directionDb - DIRECTION_DB_LOW) / range,
+    0.0f,
+    1.0f
+  );
+
+  return linear;
+}
+
+void buildTargetSignal(
+  int count,
+  int lag,
+  int32_t meanA,
+  int32_t meanB,
+  float effectiveGain,
+  float directionMask
+) {
+  for (int index = 0; index < count; index++) {
+    int bIndex = index + lag;
+    int32_t centeredA = samplesA[index] - meanA;
+    int32_t centeredB = 0;
+
+    if (bIndex >= 0 && bIndex < count) {
+      centeredB = samplesB[bIndex] - meanB;
+    }
+
+    double residual =
+      (double)centeredA -
+      (double)effectiveGain * centeredB;
+
+    double target = (double)directionMask * residual;
+
+    if (target > INT32_MAX) target = INT32_MAX;
+    if (target < INT32_MIN) target = INT32_MIN;
+
+    samplesTarget[index] = (int32_t)llround(target);
+  }
+}
+
+void calculateScores() {
+  float rmsA = (float)currentFrame.channelA.rms;
+  float rmsBAdjusted =
+    currentFrame.adaptiveGain *
+    (float)currentFrame.channelB.rms;
+
+  float maximumLevel = fmaxf(rmsA, rmsBAdjusted);
+  float levelMatch = 0.0f;
+  float aDominance = 0.0f;
+  float bDominance = 0.0f;
+  float aShare = 0.5f;
+
+  if (maximumLevel > 1.0f) {
+    levelMatch = 1.0f - fabsf(rmsA - rmsBAdjusted) / maximumLevel;
+    aDominance = (rmsA - rmsBAdjusted) / maximumLevel;
+    bDominance = (rmsBAdjusted - rmsA) / maximumLevel;
+  }
+
+  float totalLevel = rmsA + rmsBAdjusted;
+  if (totalLevel > 1.0f) aShare = rmsA / totalLevel;
+
+  levelMatch = clampFloat(levelMatch, 0.0f, 1.0f);
+  aDominance = clampFloat(aDominance, 0.0f, 1.0f);
+  bDominance = clampFloat(bDominance, 0.0f, 1.0f);
+  aShare = clampFloat(aShare, 0.0f, 1.0f);
+
+  float positiveCorrelation = clampFloat(
+    currentFrame.correlationAligned,
+    0.0f,
+    1.0f
+  );
+
+  float commonNormalized = positiveCorrelation * levelMatch;
+
+  currentFrame.commonScore = 100.0f * commonNormalized;
+
+  float directionalNormalized =
+    0.70f * aDominance +
+    0.30f * aShare * (1.0f - currentFrame.correlationMask);
+
+  currentFrame.directionalScore = 100.0f * clampFloat(
+    directionalNormalized,
+    0.0f,
+    1.0f
+  );
+
+  float backgroundDominance =
+    0.65f * bDominance +
+    0.35f * (1.0f - aShare);
+
+  float backgroundNormalized = fmaxf(
+    commonNormalized,
+    backgroundDominance
+  );
+
+  currentFrame.backgroundScore = 100.0f * clampFloat(
+    backgroundNormalized,
+    0.0f,
+    1.0f
+  );
+
+  currentFrame.residualRatio =
+    rmsA > 1.0f
+      ? (float)currentFrame.target.rms / rmsA
+      : 0.0f;
+
+  currentFrame.tone400RatioAB =
+    currentFrame.channelB.tone400Amplitude > 1.0f
+      ? currentFrame.channelA.tone400Amplitude /
+        currentFrame.channelB.tone400Amplitude
+      : 0.0f;
+
+  currentFrame.tone400TargetRatio =
+    currentFrame.channelA.tone400Amplitude > 1.0f
+      ? currentFrame.target.tone400Amplitude /
+        currentFrame.channelA.tone400Amplitude
+      : 0.0f;
+
+  currentFrame.tone1000RatioAB =
+    currentFrame.channelB.tone1000Amplitude > 1.0f
+      ? currentFrame.channelA.tone1000Amplitude /
+        currentFrame.channelB.tone1000Amplitude
+      : 0.0f;
+
+  currentFrame.tone1000TargetRatio =
+    currentFrame.channelA.tone1000Amplitude > 1.0f
+      ? currentFrame.target.tone1000Amplitude /
+        currentFrame.channelA.tone1000Amplitude
+      : 0.0f;
+
+  currentFrame.tone2000RatioAB =
+    currentFrame.channelB.tone2000Amplitude > 1.0f
+      ? currentFrame.channelA.tone2000Amplitude /
+        currentFrame.channelB.tone2000Amplitude
+      : 0.0f;
+
+  currentFrame.tone2000TargetRatio =
+    currentFrame.channelA.tone2000Amplitude > 1.0f
+      ? currentFrame.target.tone2000Amplitude /
+        currentFrame.channelA.tone2000Amplitude
+      : 0.0f;
+}
+
+bool readMicrophones() {
+  size_t bytesRead = 0;
+
+  esp_err_t error = i2s_read(
+    I2S_PORT,
+    stereoSamples,
+    sizeof(stereoSamples),
+    &bytesRead,
+    pdMS_TO_TICKS(100)
+  );
+
+  if (error != ESP_OK || bytesRead == 0) {
     readErrors++;
     return false;
   }
 
-  int count =
-    bytesRead /
-    sizeof(int32_t);
+  int stereoWords = bytesRead / sizeof(int32_t);
+  int count = stereoWords / 2;
 
   if (count <= 0) {
     readErrors++;
     return false;
   }
 
-  int64_t sum = 0;
+  if (count > READ_SAMPLES) count = READ_SAMPLES;
 
-  int32_t minimumValue =
-    INT32_MAX;
+  for (int index = 0; index < count; index++) {
+    int32_t left = stereoSamples[index * 2] >> 8;
+    int32_t right = stereoSamples[index * 2 + 1] >> 8;
 
-  int32_t maximumValue =
-    INT32_MIN;
-
-  for (
-    int index = 0;
-    index < count;
-    index++
-  ) {
-    int32_t value =
-      samples[index] >> 8;
-
-    sum += value;
-
-    if (value < minimumValue) {
-      minimumValue = value;
-    }
-
-    if (value > maximumValue) {
-      maximumValue = value;
+    if (SWAP_CHANNELS) {
+      samplesA[index] = right;
+      samplesB[index] = left;
+    } else {
+      samplesA[index] = left;
+      samplesB[index] = right;
     }
   }
 
-  int32_t mean =
-    (int32_t)(
-      sum /
-      count
-    );
+  currentFrame.frameNumber = ++frameCounter;
+  currentFrame.timeMs = millis();
+  currentFrame.count = count;
 
-  uint64_t squareSum = 0;
-  int32_t peak = 0;
+  analyzeChannel(samplesA, count, currentFrame.channelA);
+  analyzeChannel(samplesB, count, currentFrame.channelB);
 
-  for (
-    int index = 0;
-    index < count;
-    index++
+  currentFrame.correlationRaw = calculateLagCorrelation(
+    samplesA,
+    samplesB,
+    count,
+    0,
+    currentFrame.channelA.mean,
+    currentFrame.channelB.mean
+  );
+
+  currentFrame.bestLag = findBestLag(
+    samplesA,
+    samplesB,
+    count,
+    currentFrame.channelA.mean,
+    currentFrame.channelB.mean,
+    currentFrame.correlationAligned
+  );
+
+  currentFrame.gainCandidate = calculateGainCandidate(
+    samplesA,
+    samplesB,
+    count,
+    currentFrame.bestLag,
+    currentFrame.channelA.mean,
+    currentFrame.channelB.mean
+  );
+
+  currentFrame.rmsRatioAB =
+    currentFrame.channelB.rms > 0
+      ? (float)currentFrame.channelA.rms /
+        (float)currentFrame.channelB.rms
+      : 0.0f;
+
+  currentFrame.directionDb = calculateDirectionDb(
+    currentFrame.channelA.rms,
+    currentFrame.channelB.rms
+  );
+  currentFrame.directionMask = calculateDirectionMask(
+    currentFrame.directionDb
+  );
+
+  currentFrame.gainUpdated = false;
+
+  bool levelsReasonable =
+    currentFrame.rmsRatioAB >= 0.35f &&
+    currentFrame.rmsRatioAB <= 2.85f;
+
+  bool levelIsUseful =
+    currentFrame.channelA.rms >= GAIN_UPDATE_MIN_RMS &&
+    currentFrame.channelB.rms >= GAIN_UPDATE_MIN_RMS;
+
+  bool noClip =
+    currentFrame.channelA.clip == 0 &&
+    currentFrame.channelB.clip == 0;
+
+  if (
+    testRunning &&
+    getTestElapsedMs() < TEST_BACKGROUND_END_MS &&
+    currentFrame.correlationAligned >= GAIN_UPDATE_CORRELATION &&
+    levelsReasonable &&
+    levelIsUseful &&
+    noClip
   ) {
-    int32_t centered =
-      (samples[index] >> 8) -
-      mean;
+    adaptiveGain =
+      adaptiveGain * (1.0f - GAIN_SMOOTHING) +
+      currentFrame.gainCandidate * GAIN_SMOOTHING;
 
-    int32_t absoluteValue =
-      absoluteInt32(centered);
-
-    if (absoluteValue > peak) {
-      peak = absoluteValue;
-    }
-
-    int64_t square =
-      (int64_t)centered *
-      (int64_t)centered;
-
-    squareSum +=
-      (uint64_t)square;
+    adaptiveGain = clampFloat(adaptiveGain, GAIN_MIN, GAIN_MAX);
+    currentFrame.gainUpdated = true;
   }
 
-  double meanSquare =
-    (double)squareSum /
-    count;
-
-  int32_t rms =
-    (int32_t)sqrt(meanSquare);
-
-  currentFrame.frameNumber =
-    ++frameCounter;
-
-  currentFrame.timeMs =
-    millis();
-
-  currentFrame.count =
-    count;
-
-  currentFrame.mean =
-    mean;
-
-  currentFrame.minimum =
-    minimumValue;
-
-  currentFrame.maximum =
-    maximumValue;
-
-  currentFrame.rms =
-    rms;
-
-  currentFrame.peak =
-    peak;
-
-  currentFrame.p2p =
-    maximumValue -
-    minimumValue;
-
-  currentFrame.levelPercent =
-    rmsToPercent(rms);
-
-  currentFrame.clip =
-    peak >= CLIP_THRESHOLD
-      ? 1
-      : 0;
-
-  calculateWave(
-    count,
-    mean
+  currentFrame.adaptiveGain = adaptiveGain;
+  currentFrame.correlationMask = calculateCorrelationMask(
+    currentFrame.correlationAligned
   );
 
-  calculateSpectrum(
+  currentFrame.effectiveGain =
+    currentFrame.adaptiveGain *
+    currentFrame.correlationMask;
+
+  buildTargetSignal(
     count,
-    mean
+    currentFrame.bestLag,
+    currentFrame.channelA.mean,
+    currentFrame.channelB.mean,
+    currentFrame.effectiveGain,
+    currentFrame.directionMask
   );
+
+  analyzeChannel(samplesTarget, count, currentFrame.target);
+  calculateScores();
 
   fpsFrameCount++;
-
   return true;
 }
 
-// ============================================================
-// FPS
-// ============================================================
-
 void updateFps() {
-  uint32_t now =
-    millis();
+  uint32_t now = millis();
+  uint32_t elapsed = now - fpsStartedAt;
 
-  uint32_t elapsed =
-    now -
-    fpsStartedAt;
+  if (elapsed < 1000) return;
 
-  if (elapsed < 1000) {
-    return;
-  }
-
-  currentFps =
-    (
-      (float)fpsFrameCount *
-      1000.0f
-    ) /
-    elapsed;
-
+  currentFps = ((float)fpsFrameCount * 1000.0f) / elapsed;
   fpsFrameCount = 0;
   fpsStartedAt = now;
 }
 
-// ============================================================
-// TFT
-// ============================================================
+void startControlledTest() {
+  adaptiveGain = 1.0f;
+  testRunning = true;
+  testStartedAt = millis();
+
+  Serial.println("# TEST=STARTED GAIN_RESET=1.000");
+  Serial.println("# PHASE_1=0..10s NATURAL_BACKGROUND_GAIN_TRAINING");
+  Serial.println("# PHASE_2=10..20s ANGLE_0_GAIN_FROZEN");
+  Serial.println("# PHASE_3=20..30s ANGLE_45_GAIN_FROZEN");
+  Serial.println("# PHASE_4=30..40s ANGLE_90_GAIN_FROZEN");
+  Serial.println("# PHASE_5=40..50s ANGLE_135_GAIN_FROZEN");
+  Serial.println("# PHASE_6=50..60s ANGLE_180_GAIN_FROZEN");
+  Serial.println("# PHASE_7=60..70s ANGLE_225_GAIN_FROZEN");
+  Serial.println("# PHASE_8=70..80s ANGLE_270_GAIN_FROZEN");
+  Serial.println("# PHASE_9=80..90s ANGLE_315_GAIN_FROZEN");
+}
+
+void handleSerialCommands() {
+  bool startRequested = false;
+
+  while (Serial.available() > 0) {
+    uint8_t command = (uint8_t)Serial.read();
+
+    // Любой печатный символ запускает новый тест.
+    // Это работает и при включённой русской раскладке.
+    if (command > 32) startRequested = true;
+  }
+
+  if (startRequested) startControlledTest();
+}
+
+uint32_t getTestElapsedMs() {
+  if (!testRunning) return 0;
+  return millis() - testStartedAt;
+}
+
+const char *getTestPhase() {
+  if (!testRunning) return "WAIT";
+
+  uint32_t elapsed = getTestElapsedMs();
+
+  if (elapsed < TEST_BACKGROUND_END_MS) return "BACKGROUND";
+  if (elapsed < TEST_ANGLE_0_END_MS) return "ANGLE_0";
+  if (elapsed < TEST_ANGLE_45_END_MS) return "ANGLE_45";
+  if (elapsed < TEST_ANGLE_90_END_MS) return "ANGLE_90";
+  if (elapsed < TEST_ANGLE_135_END_MS) return "ANGLE_135";
+  if (elapsed < TEST_ANGLE_180_END_MS) return "ANGLE_180";
+  if (elapsed < TEST_ANGLE_225_END_MS) return "ANGLE_225";
+  if (elapsed < TEST_ANGLE_270_END_MS) return "ANGLE_270";
+  if (elapsed < TEST_ANGLE_315_END_MS) return "ANGLE_315";
+  return "DONE";
+}
+
+void updateTestState() {
+  if (!testRunning) return;
+  if (getTestElapsedMs() < TEST_ANGLE_315_END_MS) return;
+
+  testRunning = false;
+  testStartedAt = 0;
+  Serial.println("# TEST=DONE");
+  Serial.println("# TEST_PHASE=WAIT TEST_MS=0");
+}
 
 void drawStaticInterface() {
-  tft.fillScreen(
-    ST77XX_BLACK
-  );
+  tft.fillScreen(ST77XX_BLACK);
 
-  tft.fillRect(
-    0,
-    0,
-    240,
-    24,
-    ST77XX_RED
-  );
-
+  tft.fillRect(0, 0, 240, 25, ST77XX_RED);
   tft.setTextSize(2);
+  tft.setTextColor(ST77XX_WHITE, ST77XX_RED);
+  tft.setCursor(6, 5);
+  tft.print("DIR GATE RADAR");
 
-  tft.setTextColor(
-    ST77XX_WHITE,
-    ST77XX_RED
-  );
+  tft.drawRect(0, 25, 240, 42, ST77XX_WHITE);
+  tft.drawRect(0, 67, 120, 63, ST77XX_WHITE);
+  tft.drawRect(120, 67, 120, 63, ST77XX_WHITE);
+  tft.drawRect(0, 130, 240, 72, ST77XX_WHITE);
+  tft.drawRect(0, 202, 240, 94, ST77XX_WHITE);
 
-  tft.setCursor(7, 5);
-  tft.print("AUDIO RADAR");
-
-  tft.drawRect(0, 24, 240, 32, ST77XX_WHITE);
-  tft.drawRect(0, 56, 240, 28, ST77XX_WHITE);
-
-  tft.drawRect(0, 84, 120, 42, ST77XX_WHITE);
-  tft.drawRect(120, 84, 120, 42, ST77XX_WHITE);
-
-  tft.drawRect(0, 126, 120, 42, ST77XX_WHITE);
-  tft.drawRect(120, 126, 120, 42, ST77XX_WHITE);
-
-  tft.drawRect(0, 168, 240, 58, ST77XX_WHITE);
-  tft.drawRect(0, 226, 240, 70, ST77XX_WHITE);
-
-  tft.fillRect(
-    0,
-    296,
-    240,
-    24,
-    ST77XX_RED
-  );
-
+  tft.fillRect(0, 296, 240, 24, ST77XX_RED);
   tft.setTextSize(1);
-
-  tft.setTextColor(
-    ST77XX_WHITE,
-    ST77XX_RED
-  );
-
+  tft.setTextColor(ST77XX_WHITE, ST77XX_RED);
   tft.setCursor(5, 304);
-  tft.print("LOG LEVEL | ABS SPECTRUM");
+  tft.print("DIR GATE: 0..6 dB");
 }
 
-void drawValueCell(
+void drawNoData() {
+  tft.fillRect(1, 26, 238, 40, ST77XX_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+  tft.setCursor(7, 38);
+  tft.print("MIC NO DATA");
+}
+
+void drawChannelCell(
   int x,
   int y,
-  int width,
-  int height,
-  const char *label,
-  double value,
-  uint16_t labelColor
+  const char *name,
+  const AudioFrame &frame,
+  uint16_t color
 ) {
-  char valueText[20];
+  char rmsText[18];
+  formatCompact(frame.rms, rmsText, sizeof(rmsText));
 
-  formatCompact(
-    value,
-    valueText,
-    sizeof(valueText)
-  );
-
-  tft.fillRect(
-    x + 1,
-    y + 1,
-    width - 2,
-    height - 2,
-    ST77XX_BLACK
-  );
+  tft.fillRect(x + 1, y + 1, 118, 61, ST77XX_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(color, ST77XX_BLACK);
+  tft.setCursor(x + 6, y + 5);
+  tft.print(name);
 
   tft.setTextSize(1);
+  tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+  tft.setCursor(x + 6, y + 30);
+  tft.print("RMS ");
+  tft.print(rmsText);
 
-  tft.setTextColor(
-    labelColor,
-    ST77XX_BLACK
-  );
+  tft.setCursor(x + 6, y + 43);
+  tft.print("4/1/2K ");
+  tft.print(frame.tone400Level / 10);
+  tft.print("/");
+  tft.print(frame.tone1000Level / 10);
+  tft.print("/");
+  tft.print(frame.tone2000Level / 10);
 
-  tft.setCursor(
-    x + 6,
-    y + 5
-  );
-
-  tft.print(label);
-
-  tft.setTextSize(2);
-
-  tft.setTextColor(
-    ST77XX_WHITE,
-    ST77XX_BLACK
-  );
-
-  tft.setCursor(
-    x + 6,
-    y + 19
-  );
-
-  tft.print(valueText);
+  tft.setCursor(x + 6, y + 54);
+  tft.print("LVL ");
+  tft.print(frame.levelPercent);
+  tft.print("%");
 }
 
-void drawWaveform() {
-  const int graphX = 3;
-  const int graphTop = 181;
-  const int graphBottom = 221;
-  const int graphMiddle =
-    (
-      graphTop +
-      graphBottom
-    ) /
-    2;
+void drawTargetWave() {
+  const int top = 220;
+  const int bottom = 287;
+  const int middle = (top + bottom) / 2;
 
-  tft.fillRect(
-    1,
-    169,
-    238,
-    56,
-    ST77XX_BLACK
-  );
-
+  tft.fillRect(1, 203, 238, 92, ST77XX_BLACK);
   tft.setTextSize(1);
+  tft.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+  tft.setCursor(5, 207);
+  tft.print("TARGET WAVE");
 
-  tft.setTextColor(
-    ST77XX_CYAN,
-    ST77XX_BLACK
-  );
+  tft.drawFastHLine(3, middle, 234, ST77XX_BLUE);
 
-  tft.setCursor(5, 172);
-  tft.print("WAVE");
+  int previousX = 3;
+  int previousY = middle;
 
-  tft.drawFastHLine(
-    graphX,
-    graphMiddle,
-    234,
-    ST77XX_BLUE
-  );
-
-  int previousX =
-    graphX;
-
-  int previousY =
-    graphMiddle;
-
-  for (
-    int point = 0;
-    point < WAVE_POINTS;
-    point++
-  ) {
-    int x =
-      graphX +
-      (
-        point *
-        233
-      ) /
-      (
-        WAVE_POINTS - 1
-      );
-
-    int y =
-      graphMiddle -
-      (
-        currentFrame.wave[point] *
-        19
-      ) /
-      1000;
-
-    y =
-      clampInt(
-        y,
-        graphTop,
-        graphBottom
-      );
+  for (int point = 0; point < WAVE_POINTS; point++) {
+    int x = 3 + point * 233 / (WAVE_POINTS - 1);
+    int y = middle - currentFrame.target.wave[point] * 32 / 1000;
+    y = clampInt(y, top, bottom);
 
     if (point > 0) {
-      tft.drawLine(
-        previousX,
-        previousY,
-        x,
-        y,
-        ST77XX_GREEN
-      );
+      tft.drawLine(previousX, previousY, x, y, ST77XX_YELLOW);
     }
 
     previousX = x;
@@ -959,442 +992,261 @@ void drawWaveform() {
   }
 }
 
-void drawSpectrum() {
-  const int graphX = 4;
-  const int graphY = 241;
-  const int graphHeight = 50;
-  const int barWidth = 7;
-
-  tft.fillRect(
-    1,
-    227,
-    238,
-    68,
-    ST77XX_BLACK
-  );
-
-  tft.setTextSize(1);
-
-  tft.setTextColor(
-    ST77XX_MAGENTA,
-    ST77XX_BLACK
-  );
-
-  tft.setCursor(5, 230);
-  tft.print("ABS SPECTRUM 125-7875 Hz");
-
-  for (
-    int band = 0;
-    band < SPECTRUM_BANDS;
-    band++
-  ) {
-    int height =
-      (
-        currentFrame.spectrum[band] *
-        graphHeight
-      ) /
-      1000;
-
-    height =
-      clampInt(
-        height,
-        0,
-        graphHeight
-      );
-
-    int x =
-      graphX +
-      band *
-      barWidth;
-
-    int y =
-      graphY +
-      graphHeight -
-      height;
-
-    uint16_t color =
-      height < 18
-        ? ST77XX_BLUE
-        : (
-            height < 32
-              ? ST77XX_GREEN
-              : (
-                  height < 44
-                    ? ST77XX_YELLOW
-                    : ST77XX_RED
-                )
-          );
-
-    tft.fillRect(
-      x,
-      graphY,
-      barWidth - 1,
-      graphHeight,
-      ST77XX_BLACK
-    );
-
-    if (height > 0) {
-      tft.fillRect(
-        x,
-        y,
-        barWidth - 1,
-        height,
-        color
-      );
-    }
-  }
-}
-
-void drawNoData() {
-  tft.fillRect(
-    1,
-    25,
-    238,
-    30,
-    ST77XX_BLACK
-  );
-
-  tft.setTextSize(2);
-
-  tft.setTextColor(
-    ST77XX_YELLOW,
-    ST77XX_BLACK
-  );
-
-  tft.setCursor(7, 33);
-  tft.print("MIC NO DATA");
-}
-
 void updateScreen() {
-  tft.fillRect(
-    1,
-    25,
-    238,
-    30,
-    ST77XX_BLACK
-  );
-
+  tft.fillRect(1, 26, 238, 40, ST77XX_BLACK);
   tft.setTextSize(1);
+  tft.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
+  tft.setCursor(6, 30);
+  tft.print(getTestPhase());
 
-  tft.setTextColor(
-    ST77XX_GREEN,
-    ST77XX_BLACK
-  );
+  tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+  tft.setCursor(6, 44);
+  tft.print("TEST ");
+  tft.print(getTestElapsedMs() / 1000.0f, 1);
+  tft.print("s");
 
-  tft.setCursor(7, 29);
-  tft.print("MIC OK");
-
-  tft.setTextColor(
-    ST77XX_WHITE,
-    ST77XX_BLACK
-  );
-
-  tft.setCursor(7, 43);
-  tft.print("FRAME ");
-  tft.print(
-    currentFrame.frameNumber
-  );
-
-  tft.setCursor(142, 29);
+  tft.setCursor(127, 30);
   tft.print("FPS ");
-  tft.print(
-    currentFps,
-    1
-  );
+  tft.print(currentFps, 1);
 
-  tft.setCursor(142, 43);
+  tft.setCursor(127, 44);
   tft.print("ERR ");
-  tft.print(
-    readErrors
+  tft.print(readErrors);
+
+  drawChannelCell(
+    0,
+    67,
+    "A DIR",
+    currentFrame.channelA,
+    ST77XX_GREEN
   );
 
-  tft.fillRect(
-    1,
-    57,
-    238,
-    26,
-    ST77XX_BLACK
+  drawChannelCell(
+    120,
+    67,
+    "B OPEN",
+    currentFrame.channelB,
+    ST77XX_CYAN
   );
 
+  tft.fillRect(1, 131, 238, 70, ST77XX_BLACK);
   tft.setTextSize(1);
+  tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
 
-  tft.setTextColor(
-    ST77XX_WHITE,
-    ST77XX_BLACK
-  );
+  tft.setCursor(6, 136);
+  tft.print("LAG ");
+  tft.print(currentFrame.bestLag);
+  tft.print(" CORR ");
+  tft.print(currentFrame.correlationAligned, 3);
 
-  tft.setCursor(6, 62);
-  tft.print("LEVEL");
+  tft.setCursor(6, 150);
+  tft.print("K ");
+  tft.print(currentFrame.adaptiveGain, 3);
+  tft.print(" EFF ");
+  tft.print(currentFrame.effectiveGain, 3);
 
-  tft.setCursor(6, 73);
-  tft.print(
-    currentFrame.levelPercent
-  );
-  tft.print("%");
+  tft.setCursor(6, 164);
+  tft.print("C-MASK ");
+  tft.print(currentFrame.correlationMask, 2);
+  tft.print(" D-MASK ");
+  tft.print(currentFrame.directionMask, 2);
 
-  int barX = 48;
-  int barY = 64;
-  int barWidth = 184;
-  int barHeight = 12;
+  tft.setCursor(6, 178);
+  tft.print("DIR dB ");
+  tft.print(currentFrame.directionDb, 1);
+  tft.print(" BACK ");
+  tft.print(currentFrame.backgroundScore, 0);
 
-  tft.drawRect(
-    barX,
-    barY,
-    barWidth,
-    barHeight,
-    ST77XX_WHITE
-  );
+  tft.setCursor(6, 191);
+  tft.print("TGT ");
+  tft.print(currentFrame.target.rms);
+  tft.print(" 4/1/2K ");
+  tft.print(currentFrame.target.tone400Level / 10);
+  tft.print("/");
+  tft.print(currentFrame.target.tone1000Level / 10);
+  tft.print("/");
+  tft.print(currentFrame.target.tone2000Level / 10);
 
-  tft.fillRect(
-    barX + 1,
-    barY + 1,
-    barWidth - 2,
-    barHeight - 2,
-    ST77XX_BLACK
-  );
-
-  int fillWidth =
-    (
-      currentFrame.levelPercent *
-      (barWidth - 2)
-    ) /
-    100;
-
-  uint16_t levelColor =
-    currentFrame.clip
-      ? ST77XX_RED
-      : (
-          currentFrame.levelPercent < 65
-            ? ST77XX_GREEN
-            : (
-                currentFrame.levelPercent < 85
-                  ? ST77XX_YELLOW
-                  : ST77XX_RED
-              )
-        );
-
-  tft.fillRect(
-    barX + 1,
-    barY + 1,
-    fillWidth,
-    barHeight - 2,
-    levelColor
-  );
-
-  if (currentFrame.clip) {
-    tft.setTextColor(
-      ST77XX_RED,
-      ST77XX_BLACK
-    );
-
-    tft.setCursor(205, 57);
-    tft.print("CLIP");
-  }
-
-  drawValueCell(
-    0,
-    84,
-    120,
-    42,
-    "RMS",
-    currentFrame.rms,
-    ST77XX_CYAN
-  );
-
-  drawValueCell(
-    120,
-    84,
-    120,
-    42,
-    "PEAK",
-    currentFrame.peak,
-    ST77XX_CYAN
-  );
-
-  drawValueCell(
-    0,
-    126,
-    120,
-    42,
-    "P2P",
-    currentFrame.p2p,
-    ST77XX_CYAN
-  );
-
-  drawValueCell(
-    120,
-    126,
-    120,
-    42,
-    "DOM Hz",
-    currentFrame.dominantFrequency,
-    ST77XX_CYAN
-  );
-
-  drawWaveform();
-  drawSpectrum();
+  drawTargetWave();
 }
 
-// ============================================================
-// SERIAL
-// ============================================================
-
-void printSerialFrame() {
+void printFrameLine(const char *prefix, const AudioFrame &frame) {
   Serial.printf(
-    "FRAME T_MS=%lu ID=%lu COUNT=%d MEAN=%ld MIN=%ld MAX=%ld RMS=%ld PEAK=%ld P2P=%ld LEVEL=%d CLIP=%d DOM_HZ=%.1f DOM_AMP=%.1f SPEC_MAX=%.1f READ_ERR=%lu FPS=%.1f\n",
+    "%s T_MS=%lu ID=%lu COUNT=%d MEAN=%ld MIN=%ld MAX=%ld RMS=%ld PEAK=%ld P2P=%ld LEVEL=%d CLIP=%d TONE400_AMP=%.1f TONE400_LEVEL=%u TONE1000_AMP=%.1f TONE1000_LEVEL=%u TONE2000_AMP=%.1f TONE2000_LEVEL=%u DOM_HZ=%.1f DOM_AMP=%.1f SPEC_MAX=%.1f READ_ERR=%lu FPS=%.1f\n",
+    prefix,
     (unsigned long)currentFrame.timeMs,
     (unsigned long)currentFrame.frameNumber,
     currentFrame.count,
-    (long)currentFrame.mean,
-    (long)currentFrame.minimum,
-    (long)currentFrame.maximum,
-    (long)currentFrame.rms,
-    (long)currentFrame.peak,
-    (long)currentFrame.p2p,
-    currentFrame.levelPercent,
-    currentFrame.clip,
-    currentFrame.dominantFrequency,
-    currentFrame.dominantAmplitude,
-    currentFrame.spectrumMaximum,
+    (long)frame.mean,
+    (long)frame.minimum,
+    (long)frame.maximum,
+    (long)frame.rms,
+    (long)frame.peak,
+    (long)frame.p2p,
+    frame.levelPercent,
+    frame.clip,
+    frame.tone400Amplitude,
+    frame.tone400Level,
+    frame.tone1000Amplitude,
+    frame.tone1000Level,
+    frame.tone2000Amplitude,
+    frame.tone2000Level,
+    frame.dominantFrequency,
+    frame.dominantAmplitude,
+    frame.spectrumMaximum,
     (unsigned long)readErrors,
     currentFps
   );
+}
 
+void printWaveLine(const char *prefix, const AudioFrame &frame) {
   Serial.printf(
-    "WAVE T_MS=%lu DATA=",
+    "%s T_MS=%lu DATA=",
+    prefix,
     (unsigned long)currentFrame.timeMs
   );
 
-  for (
-    int point = 0;
-    point < WAVE_POINTS;
-    point++
-  ) {
-    if (point > 0) {
-      Serial.print(",");
-    }
-
-    Serial.print(
-      currentFrame.wave[point]
-    );
+  for (int point = 0; point < WAVE_POINTS; point++) {
+    if (point > 0) Serial.print(",");
+    Serial.print(frame.wave[point]);
   }
 
   Serial.println();
+}
 
+void printSpectrumLine(const char *prefix, const AudioFrame &frame) {
   Serial.printf(
-    "SPECTRUM T_MS=%lu FIRST_HZ=%.1f STEP_HZ=%.1f SCALE=ABS_LOG DATA=",
+    "%s T_MS=%lu FIRST_HZ=%.1f STEP_HZ=%.1f SCALE=ABS_LOG DATA=",
+    prefix,
     (unsigned long)currentFrame.timeMs,
     SPECTRUM_FIRST_HZ,
     SPECTRUM_STEP_HZ
   );
 
-  for (
-    int band = 0;
-    band < SPECTRUM_BANDS;
-    band++
-  ) {
-    if (band > 0) {
-      Serial.print(",");
-    }
-
-    Serial.print(
-      currentFrame.spectrum[band]
-    );
+  for (int band = 0; band < SPECTRUM_BANDS; band++) {
+    if (band > 0) Serial.print(",");
+    Serial.print(frame.spectrum[band]);
   }
 
   Serial.println();
+}
+
+void printSerialFrame() {
+  printFrameLine("FRAME_A", currentFrame.channelA);
+  printFrameLine("FRAME_B", currentFrame.channelB);
+  printFrameLine("FRAME_TARGET", currentFrame.target);
+
+  Serial.printf(
+    "COMPARE T_MS=%lu ID=%lu TEST_MS=%lu TEST_PHASE=%s BEST_LAG=%d CORR_RAW=%.6f CORR_ALIGNED=%.6f CORR_MASK=%.6f GAIN_CANDIDATE=%.6f GAIN_K=%.6f EFFECTIVE_K=%.6f GAIN_UPDATED=%d RMS_RATIO_AB=%.6f DIR_DB=%.6f DIR_MASK=%.6f RESIDUAL_RATIO=%.6f TONE400_RATIO_AB=%.6f TONE400_TARGET_RATIO=%.6f TONE1000_RATIO_AB=%.6f TONE1000_TARGET_RATIO=%.6f TONE2000_RATIO_AB=%.6f TONE2000_TARGET_RATIO=%.6f COMMON_SCORE=%.3f DIRECTIONAL_SCORE=%.3f BACKGROUND_SCORE=%.3f\n",
+    (unsigned long)currentFrame.timeMs,
+    (unsigned long)currentFrame.frameNumber,
+    (unsigned long)getTestElapsedMs(),
+    getTestPhase(),
+    currentFrame.bestLag,
+    currentFrame.correlationRaw,
+    currentFrame.correlationAligned,
+    currentFrame.correlationMask,
+    currentFrame.gainCandidate,
+    currentFrame.adaptiveGain,
+    currentFrame.effectiveGain,
+    currentFrame.gainUpdated ? 1 : 0,
+    currentFrame.rmsRatioAB,
+    currentFrame.directionDb,
+    currentFrame.directionMask,
+    currentFrame.residualRatio,
+    currentFrame.tone400RatioAB,
+    currentFrame.tone400TargetRatio,
+    currentFrame.tone1000RatioAB,
+    currentFrame.tone1000TargetRatio,
+    currentFrame.tone2000RatioAB,
+    currentFrame.tone2000TargetRatio,
+    currentFrame.commonScore,
+    currentFrame.directionalScore,
+    currentFrame.backgroundScore
+  );
+
+  printWaveLine("WAVE_A", currentFrame.channelA);
+  printWaveLine("WAVE_B", currentFrame.channelB);
+  printWaveLine("WAVE_TARGET", currentFrame.target);
+
+  printSpectrumLine("SPECTRUM_A", currentFrame.channelA);
+  printSpectrumLine("SPECTRUM_B", currentFrame.channelB);
+  printSpectrumLine("SPECTRUM_TARGET", currentFrame.target);
+
   Serial.println("---");
 }
 
-// ============================================================
-// SETUP И LOOP
-// ============================================================
-
 void setup() {
   Serial.begin(115200);
-
   delay(800);
 
   Serial.println();
-  Serial.println("# ESP32 RADAR UNIVERSAL AUDIO MONITOR");
-  Serial.println("# ESP32-S3 + ST7789 + ICS-43434");
-  Serial.println("# FORMAT=FRAME,WAVE,SPECTRUM");
-  Serial.println("# LEVEL_SCALE=LOG");
-  Serial.println("# SPECTRUM_SCALE=ABS_LOG");
-  Serial.println("# SPECTRUM_BANDS=32");
-  Serial.println("# SPECTRUM_RANGE=125..7875Hz");
+  Serial.println("# ESP32 RADAR MASKED ADAPTIVE MULTITONE");
+  Serial.println("# FIRMWARE_VERSION=ANGLE_GATE_2000HZ_V5_FULL_CIRCLE");
+  Serial.println("# CHANNEL_ORDER=NATIVE");
+  Serial.println("# CHANNEL_A=LEFT DIRECTIONAL");
+  Serial.println("# CHANNEL_B=RIGHT OPEN_BACKGROUND");
+  Serial.println("# TARGET=DIR_MASK*(A-EFFECTIVE_K*ALIGNED_B)");
+  Serial.println("# TEST_TONES_HZ=400,1000,2000");
+  Serial.println("# SEND_ANY_PRINTABLE_CHARACTER_TO_START_TEST");
+  Serial.println("# SERIAL_STREAM=TEST_ONLY");
+  Serial.println("# ADAPTIVE_GAIN=BACKGROUND_ONLY_THEN_FROZEN");
+  Serial.println("# DIRECTION_GATE=RMS_A_OVER_B_SOFTSTEP");
+  Serial.printf("# DIRECTION_GATE_DB_LOW=%.1f DIRECTION_GATE_DB_HIGH=%.1f\n", DIRECTION_DB_LOW, DIRECTION_DB_HIGH);
+  Serial.println("# TEST=0..10s_BACKGROUND_TRAIN 10..20s_A0 20..30s_A45 30..40s_A90 40..50s_A135 50..60s_A180 60..70s_A225 70..80s_A270 80..90s_A315");
 
   Serial.printf(
-    "# SAMPLE_RATE=%d READ_SAMPLES=%d WAVE_POINTS=%d\n",
+    "# SAMPLE_RATE=%d READ_SAMPLES=%d MAX_LAG=%d GAIN_START=%.3f MASK_LOW=%.2f MASK_HIGH=%.2f\n",
     SAMPLE_RATE,
     READ_SAMPLES,
-    WAVE_POINTS
+    MAX_LAG_SAMPLES,
+    adaptiveGain,
+    MASK_CORRELATION_LOW,
+    MASK_CORRELATION_HIGH
   );
 
-  SPI.begin(
-    TFT_SCLK_PIN,
-    -1,
-    TFT_MOSI_PIN,
-    TFT_CS_PIN
-  );
-
-  tft.init(
-    240,
-    320
-  );
-
+  SPI.begin(TFT_SCLK_PIN, -1, TFT_MOSI_PIN, TFT_CS_PIN);
+  tft.init(240, 320);
   tft.setRotation(0);
 
   drawStaticInterface();
   drawNoData();
 
-  micReady =
-    setupI2S();
+  micReady = setupI2S();
 
   if (micReady) {
-    Serial.println("# MIC=I2S_READY");
+    Serial.println("# MIC=STEREO_I2S_READY");
     Serial.println("# MIC=WARMUP");
-
-    warmUpMicrophone();
-
+    warmUpMicrophones();
     Serial.println("# MIC=READY");
+    Serial.println("# TEST_PHASE=WAIT TEST_MS=0");
   } else {
     Serial.println("# MIC=I2S_ERROR");
   }
 
-  fpsStartedAt =
-    millis();
+  fpsStartedAt = millis();
 }
 
 void loop() {
+  handleSerialCommands();
+  updateTestState();
+
   if (!micReady) {
     drawNoData();
     delay(500);
     return;
   }
 
-  bool frameOk =
-    readMicrophone();
-
+  bool frameOk = readMicrophones();
   updateFps();
 
-  if (!frameOk) {
-    return;
-  }
+  if (!frameOk) return;
 
-  if (
-    currentFrame.frameNumber %
-    SERIAL_EVERY_FRAMES ==
-    0
-  ) {
+  if (testRunning && currentFrame.frameNumber % SERIAL_EVERY_FRAMES == 0) {
     printSerialFrame();
   }
 
-  if (
-    currentFrame.frameNumber %
-    TFT_EVERY_FRAMES ==
-    0
-  ) {
+  if (currentFrame.frameNumber % TFT_EVERY_FRAMES == 0) {
     updateScreen();
   }
 }
