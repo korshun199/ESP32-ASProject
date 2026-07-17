@@ -29,7 +29,7 @@
     "*.cpp": "cpp"
   },
 
-  "editor.hover.enabled": true,
+  "editor.hover.enabled": "on",
   "editor.quickSuggestions": {
     "other": true,
     "comments": false,

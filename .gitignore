@@ -23,3 +23,7 @@ Thumbs.db
 *~
 *.swp
 *.swo
+
+# Generated radar measurements
+/device_reports/*.log
+/firmware/*.log

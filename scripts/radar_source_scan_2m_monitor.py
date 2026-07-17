@@ -13,7 +13,7 @@ PORT = "/dev/ttyACM0"
 BAUD = 115200
 
 FREQUENCY_HZ = 2000
-RADIUS_CM = 30
+SOURCE_DISTANCE_M = 2.0
 
 BACKGROUND_SECONDS = 10.0
 PREP_SECONDS = 5.0
@@ -50,7 +50,7 @@ def run_monitor():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = output_dir / f"radar_sweep_360_2000hz_{timestamp}.log"
+    log_path = output_dir / f"radar_source_scan_2m_2000hz_{timestamp}.log"
 
     stop_reader = threading.Event()
     reader_errors = []
@@ -79,13 +79,13 @@ def run_monitor():
             f"NAME={name}",
             f"WALL_TIME={wall_time()}",
             f"FREQ_HZ={FREQUENCY_HZ}",
-            f"RADIUS_CM={RADIUS_CM}",
-            "PLANE=HORIZONTAL_TABLE",
-            "CENTER=TUBE_OPENING",
-            "ZERO_DEG=TUBE_OPENING_OUTWARD_AXIS",
+            f"SOURCE_DISTANCE_M={SOURCE_DISTANCE_M:.1f}",
+            "PLANE=HORIZONTAL_ROTATION",
+            "ROTATION_CENTER=MICROPHONE_NODE_AXIS",
+            "ZERO_DEG=TUBE_AXIS_POINTS_TO_SOURCE",
             "ROTATION=CLOCKWISE_TOP_VIEW",
-            "PHONE=FLAT_ON_TABLE",
-            "SPEAKER=AIMED_AT_TUBE_OPENING",
+            "SOURCE=FIXED",
+            "SOURCE_AIMED_AT_NODE",
         ]
         for key, value in fields.items():
             parts.append(f"{key}={value}")
@@ -160,16 +160,16 @@ def run_monitor():
         print("\r" + " " * 72 + "\r", end="", flush=True)
 
     try:
-        print(CYAN + BOLD + "\nНЕПРЕРЫВНЫЙ КРУГ 360° ЗА 60 СЕКУНД, 2000 ГЦ" + RESET)
+        print(CYAN + BOLD + "\nПОИСК ИСТОЧНИКА: ВРАЩЕНИЕ УЗЛА 360° ЗА 60 СЕКУНД, 2000 ГЦ" + RESET)
         print()
-        print("Положение:")
-        print("  • трубка лежит на столе;")
-        print("  • центр круга — отверстие трубки;")
-        print("  • динамик телефона движется по окружности радиусом 30 см;")
-        print("  • телефон лежит на столе;")
-        print("  • динамик всё время направлен на отверстие трубки;")
-        print("  • стартовая точка 0° — перед отверстием вдоль оси трубки;")
-        print("  • движение по часовой стрелке при взгляде сверху.")
+        print("Геометрия опыта:")
+        print("  • источник звука неподвижен в точке A;")
+        print("  • микрофонный узел находится в точке B и вращается вокруг своей оси;")
+        print("  • расстояние A–B равно 2 метрам;")
+        print("  • источник и ось микрофонного узла находятся примерно на одной высоте;")
+        print("  • источник всё время направлен на микрофонный узел;")
+        print("  • стартовая точка 0° — трубка направлена точно на источник;")
+        print("  • вращать узел по часовой стрелке при взгляде сверху.")
         print()
         print("Скорость:")
         print("  • один полный круг ровно за 60 секунд;")
@@ -178,11 +178,13 @@ def run_monitor():
         print()
         print("Сценарий:")
         print("  1. 10 секунд естественного фона, генератор выключен;")
-        print("  2. 5 секунд на включение 2000 Гц и установку телефона в 0°;")
-        print("  3. по команде ПОЕХАЛИ равномерно сделать полный круг за минуту;")
+        print("  2. 5 секунд на включение 2000 Гц и установку узла в 0°;")
+        print("  3. по команде ПОЕХАЛИ равномерно вращать узел полный круг за минуту;")
         print("  4. скрипт сам остановит измерение через 60 секунд.")
         print()
-        print("Ctrl+C можно нажать для аварийной остановки.")
+        print("В точке 30 секунд трубка должна смотреть строго от источника.")
+        print("В точке 60 секунд она должна вернуться к источнику.")
+        print("Ctrl+C можно нажать только для аварийной остановки.")
         print(GREEN + f"\nЛог: {log_path}" + RESET)
 
         ser = serial.Serial(
@@ -201,17 +203,17 @@ def run_monitor():
         write_log(
             "### MONITOR_HEADER "
             f"WALL_TIME={wall_time()} PORT={PORT} BAUD={BAUD} "
-            f"FREQ_HZ={FREQUENCY_HZ} RADIUS_CM={RADIUS_CM} "
-            "MODE=CONTINUOUS_SWEEP_360 "
+            f"FREQ_HZ={FREQUENCY_HZ} SOURCE_DISTANCE_M={SOURCE_DISTANCE_M:.1f} "
+            "MODE=FIXED_SOURCE_ROTATING_NODE_360 "
             f"BACKGROUND_SECONDS={BACKGROUND_SECONDS:.1f} "
             f"PREP_SECONDS={PREP_SECONDS:.1f} "
             f"SWEEP_SECONDS={SWEEP_SECONDS:.1f} "
             f"ANGULAR_SPEED_DEG_S={DEGREES_PER_SECOND:.6f} "
-            "PLANE=HORIZONTAL_TABLE CENTER=TUBE_OPENING "
-            "ZERO_DEG=TUBE_OPENING_OUTWARD_AXIS "
-            "ROTATION=CLOCKWISE_TOP_VIEW PHONE=FLAT_ON_TABLE "
-            "SPEAKER=AIMED_AT_TUBE_OPENING "
-            "RADIUS_REFERENCE=PHONE_SPEAKER_TO_TUBE_OPENING "
+            "PLANE=HORIZONTAL_ROTATION ROTATION_CENTER=MICROPHONE_NODE_AXIS "
+            "ZERO_DEG=TUBE_AXIS_POINTS_TO_SOURCE "
+            "ROTATION=CLOCKWISE_TOP_VIEW SOURCE=FIXED "
+            "SOURCE_AIMED_AT_NODE "
+            "SOURCE_DISTANCE_REFERENCE=SOURCE_TO_ROTATION_AXIS "
             "GAIN=BACKGROUND_ONLY_FROZEN_AFTER_10S"
         )
 
@@ -220,13 +222,13 @@ def run_monitor():
 
         marker(
             "WAIT",
-            NOTE="GENERATOR_OFF_PHONE_AT_ZERO_DEG_PRESS_ENTER",
+            NOTE="GENERATOR_OFF_NODE_AT_ZERO_DEG_TUBE_POINTS_TO_SOURCE_PRESS_ENTER",
         )
 
         input(
             YELLOW
             + BOLD
-            + "\nГенератор ВЫКЛЮЧЕН, телефон в точке 0°. Нажми Enter... "
+            + "\nГенератор ВЫКЛЮЧЕН, трубка направлена на источник. Нажми Enter... "
             + RESET
         )
 
@@ -250,7 +252,7 @@ def run_monitor():
         marker("BACKGROUND_START", PROGRAM_ELAPSED="0.000")
         banner(
             "ФОН, 10 СЕКУНД",
-            "ГЕНЕРАТОР ВЫКЛЮЧЕН. ТЕЛЕФОН И ТРУБКУ НЕ ДВИГАТЬ.",
+            "ГЕНЕРАТОР ВЫКЛЮЧЕН. УЗЕЛ И ИСТОЧНИК НЕ ДВИГАТЬ.",
             CYAN,
         )
         wait_seconds(BACKGROUND_SECONDS, "ФОН", CYAN)
@@ -268,11 +270,11 @@ def run_monitor():
         marker(
             "PREP_START",
             PROGRAM_ELAPSED=f"{background_end - program_start:.6f}",
-            NOTE="TURN_ON_2000HZ_KEEP_PHONE_AT_ZERO_DEG",
+            NOTE="TURN_ON_2000HZ_KEEP_NODE_AT_ZERO_DEG",
         )
         banner(
             "ПОДГОТОВКА, 5 СЕКУНД",
-            "ВКЛЮЧИТЬ 2000 ГЦ. ТЕЛЕФОН ОСТАВИТЬ В ТОЧКЕ 0°.",
+            "ВКЛЮЧИТЬ 2000 ГЦ. ТРУБКА ОСТАЁТСЯ НАПРАВЛЕНА НА ИСТОЧНИК.",
             YELLOW,
         )
         wait_seconds(PREP_SECONDS, "ПОДГОТОВКА", YELLOW)
@@ -293,7 +295,7 @@ def run_monitor():
 
         banner(
             "ПОЕХАЛИ: 0°",
-            "РАВНОМЕРНО ПО ЧАСОВОЙ СТРЕЛКЕ. ПОЛНЫЙ КРУГ ЗА 60 СЕКУНД.",
+            "РАВНОМЕРНО ВРАЩАТЬ УЗЕЛ ПО ЧАСОВОЙ СТРЕЛКЕ. КРУГ ЗА 60 СЕКУНД.",
             GREEN,
         )
 
@@ -363,7 +365,7 @@ def run_monitor():
 
         banner(
             "КРУГ ЗАВЕРШЁН: 360°",
-            "ОСТАНОВИТЬ ТЕЛЕФОН В ТОЧКЕ 0° И ВЫКЛЮЧИТЬ ГЕНЕРАТОР.",
+            "ОСТАНОВИТЬ УЗЕЛ В ТОЧКЕ 0° И ВЫКЛЮЧИТЬ ГЕНЕРАТОР.",
             MAGENTA,
         )
 

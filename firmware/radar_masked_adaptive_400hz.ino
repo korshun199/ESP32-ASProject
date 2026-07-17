@@ -10,16 +10,10 @@
     SD   -> GPIO6
 
   Очищенный сигнал:
-    TARGET = DIRECTION_MASK * (A - EFFECTIVE_K * B)
+    TARGET = A - EFFECTIVE_K * B
 
   EFFECTIVE_K зависит от корреляции каналов.
-  DIRECTION_MASK зависит от отношения RMS каналов A/B:
-    0 дБ и ниже -> 0
-    6 дБ и выше -> 1
-    между ними -> плавный переход линейный переход.
-  Точные измеряемые частоты: 400, 1000 и 2000 Гц.
-  Порядок каналов исправлен: A=LEFT направленный, B=RIGHT открытый.
-  Для теста отправить любой печатный символ в монитор порта.
+  Для теста отправить символ T в монитор порта.
 */
 
 #include <Arduino.h>
@@ -56,9 +50,7 @@ static const int WARMUP_BUFFERS = 8;
 static const int SERIAL_EVERY_FRAMES = 6;
 static const int TFT_EVERY_FRAMES = 6;
 
-static const float TEST_TONE_400_HZ = 400.0f;
-static const float TEST_TONE_1000_HZ = 1000.0f;
-static const float TEST_TONE_2000_HZ = 2000.0f;
+static const float TEST_TONE_HZ = 400.0f;
 static const float SPECTRUM_FIRST_HZ = 125.0f;
 static const float SPECTRUM_STEP_HZ = 250.0f;
 
@@ -81,10 +73,6 @@ static const int32_t GAIN_UPDATE_MIN_RMS = 6000;
 static const float MASK_CORRELATION_LOW = 0.25f;
 static const float MASK_CORRELATION_HIGH = 0.85f;
 
-// Мягкий направленный затвор по отношению RMS A/B.
-static const float DIRECTION_DB_LOW = 0.0f;
-static const float DIRECTION_DB_HIGH = 6.0f;
-
 // Буферы.
 int32_t stereoSamples[READ_SAMPLES * 2];
 int32_t samplesA[READ_SAMPLES];
@@ -102,10 +90,6 @@ struct AudioFrame {
   int clip;
   float tone400Amplitude;
   uint16_t tone400Level;
-  float tone1000Amplitude;
-  uint16_t tone1000Level;
-  float tone2000Amplitude;
-  uint16_t tone2000Level;
   int16_t wave[WAVE_POINTS];
   uint16_t spectrum[SPECTRUM_BANDS];
   float spectrumMaximum;
@@ -125,15 +109,9 @@ struct ComparisonFrame {
   float adaptiveGain;
   float effectiveGain;
   float rmsRatioAB;
-  float directionDb;
-  float directionMask;
   float residualRatio;
-  float tone400RatioAB;
-  float tone400TargetRatio;
-  float tone1000RatioAB;
-  float tone1000TargetRatio;
-  float tone2000RatioAB;
-  float tone2000TargetRatio;
+  float toneRatioAB;
+  float toneTargetRatio;
   float commonScore;
   float directionalScore;
   float backgroundScore;
@@ -154,15 +132,6 @@ float currentFps = 0.0f;
 float adaptiveGain = 1.0f;
 
 // Таймер контролируемого теста.
-static const uint32_t TEST_BACKGROUND_END_MS = 10000;
-static const uint32_t TEST_ANGLE_0_END_MS = 20000;
-static const uint32_t TEST_ANGLE_45_END_MS = 30000;
-static const uint32_t TEST_ANGLE_90_END_MS = 40000;
-static const uint32_t TEST_ANGLE_135_END_MS = 50000;
-static const uint32_t TEST_ANGLE_180_END_MS = 60000;
-static const uint32_t TEST_ANGLE_225_END_MS = 70000;
-static const uint32_t TEST_ANGLE_270_END_MS = 80000;
-static const uint32_t TEST_ANGLE_315_END_MS = 90000;
 bool testRunning = false;
 uint32_t testStartedAt = 0;
 
@@ -305,26 +274,12 @@ void calculateSpectrum(
 ) {
   frame.tone400Amplitude = calculateBandAmplitude(
     samples,
-    TEST_TONE_400_HZ,
-    count,
-    frame.mean
-  );
-  frame.tone1000Amplitude = calculateBandAmplitude(
-    samples,
-    TEST_TONE_1000_HZ,
-    count,
-    frame.mean
-  );
-  frame.tone2000Amplitude = calculateBandAmplitude(
-    samples,
-    TEST_TONE_2000_HZ,
+    TEST_TONE_HZ,
     count,
     frame.mean
   );
 
   frame.tone400Level = spectrumAmplitudeToLevel(frame.tone400Amplitude);
-  frame.tone1000Level = spectrumAmplitudeToLevel(frame.tone1000Amplitude);
-  frame.tone2000Level = spectrumAmplitudeToLevel(frame.tone2000Amplitude);
 
   float maximumAmplitude = 0.0f;
   float dominantAmplitude = 0.0f;
@@ -528,32 +483,12 @@ float calculateCorrelationMask(float correlation) {
   );
 }
 
-float calculateDirectionDb(int32_t rmsA, int32_t rmsB) {
-  float safeA = fmaxf((float)rmsA, 1.0f);
-  float safeB = fmaxf((float)rmsB, 1.0f);
-  return 20.0f * log10f(safeA / safeB);
-}
-
-float calculateDirectionMask(float directionDb) {
-  float range = DIRECTION_DB_HIGH - DIRECTION_DB_LOW;
-  if (range <= 0.0f) return 0.0f;
-
-  float linear = clampFloat(
-    (directionDb - DIRECTION_DB_LOW) / range,
-    0.0f,
-    1.0f
-  );
-
-  return linear;
-}
-
 void buildTargetSignal(
   int count,
   int lag,
   int32_t meanA,
   int32_t meanB,
-  float effectiveGain,
-  float directionMask
+  float effectiveGain
 ) {
   for (int index = 0; index < count; index++) {
     int bIndex = index + lag;
@@ -564,11 +499,9 @@ void buildTargetSignal(
       centeredB = samplesB[bIndex] - meanB;
     }
 
-    double residual =
+    double target =
       (double)centeredA -
       (double)effectiveGain * centeredB;
-
-    double target = (double)directionMask * residual;
 
     if (target > INT32_MAX) target = INT32_MAX;
     if (target < INT32_MIN) target = INT32_MIN;
@@ -643,40 +576,16 @@ void calculateScores() {
       ? (float)currentFrame.target.rms / rmsA
       : 0.0f;
 
-  currentFrame.tone400RatioAB =
+  currentFrame.toneRatioAB =
     currentFrame.channelB.tone400Amplitude > 1.0f
       ? currentFrame.channelA.tone400Amplitude /
         currentFrame.channelB.tone400Amplitude
       : 0.0f;
 
-  currentFrame.tone400TargetRatio =
+  currentFrame.toneTargetRatio =
     currentFrame.channelA.tone400Amplitude > 1.0f
       ? currentFrame.target.tone400Amplitude /
         currentFrame.channelA.tone400Amplitude
-      : 0.0f;
-
-  currentFrame.tone1000RatioAB =
-    currentFrame.channelB.tone1000Amplitude > 1.0f
-      ? currentFrame.channelA.tone1000Amplitude /
-        currentFrame.channelB.tone1000Amplitude
-      : 0.0f;
-
-  currentFrame.tone1000TargetRatio =
-    currentFrame.channelA.tone1000Amplitude > 1.0f
-      ? currentFrame.target.tone1000Amplitude /
-        currentFrame.channelA.tone1000Amplitude
-      : 0.0f;
-
-  currentFrame.tone2000RatioAB =
-    currentFrame.channelB.tone2000Amplitude > 1.0f
-      ? currentFrame.channelA.tone2000Amplitude /
-        currentFrame.channelB.tone2000Amplitude
-      : 0.0f;
-
-  currentFrame.tone2000TargetRatio =
-    currentFrame.channelA.tone2000Amplitude > 1.0f
-      ? currentFrame.target.tone2000Amplitude /
-        currentFrame.channelA.tone2000Amplitude
       : 0.0f;
 }
 
@@ -759,14 +668,6 @@ bool readMicrophones() {
         (float)currentFrame.channelB.rms
       : 0.0f;
 
-  currentFrame.directionDb = calculateDirectionDb(
-    currentFrame.channelA.rms,
-    currentFrame.channelB.rms
-  );
-  currentFrame.directionMask = calculateDirectionMask(
-    currentFrame.directionDb
-  );
-
   currentFrame.gainUpdated = false;
 
   bool levelsReasonable =
@@ -782,8 +683,6 @@ bool readMicrophones() {
     currentFrame.channelB.clip == 0;
 
   if (
-    testRunning &&
-    getTestElapsedMs() < TEST_BACKGROUND_END_MS &&
     currentFrame.correlationAligned >= GAIN_UPDATE_CORRELATION &&
     levelsReasonable &&
     levelIsUseful &&
@@ -811,8 +710,7 @@ bool readMicrophones() {
     currentFrame.bestLag,
     currentFrame.channelA.mean,
     currentFrame.channelB.mean,
-    currentFrame.effectiveGain,
-    currentFrame.directionMask
+    currentFrame.effectiveGain
   );
 
   analyzeChannel(samplesTarget, count, currentFrame.target);
@@ -833,35 +731,19 @@ void updateFps() {
   fpsStartedAt = now;
 }
 
-void startControlledTest() {
-  adaptiveGain = 1.0f;
-  testRunning = true;
-  testStartedAt = millis();
-
-  Serial.println("# TEST=STARTED GAIN_RESET=1.000");
-  Serial.println("# PHASE_1=0..10s NATURAL_BACKGROUND_GAIN_TRAINING");
-  Serial.println("# PHASE_2=10..20s ANGLE_0_GAIN_FROZEN");
-  Serial.println("# PHASE_3=20..30s ANGLE_45_GAIN_FROZEN");
-  Serial.println("# PHASE_4=30..40s ANGLE_90_GAIN_FROZEN");
-  Serial.println("# PHASE_5=40..50s ANGLE_135_GAIN_FROZEN");
-  Serial.println("# PHASE_6=50..60s ANGLE_180_GAIN_FROZEN");
-  Serial.println("# PHASE_7=60..70s ANGLE_225_GAIN_FROZEN");
-  Serial.println("# PHASE_8=70..80s ANGLE_270_GAIN_FROZEN");
-  Serial.println("# PHASE_9=80..90s ANGLE_315_GAIN_FROZEN");
-}
-
 void handleSerialCommands() {
-  bool startRequested = false;
-
   while (Serial.available() > 0) {
-    uint8_t command = (uint8_t)Serial.read();
+    char command = (char)Serial.read();
 
-    // Любой печатный символ запускает новый тест.
-    // Это работает и при включённой русской раскладке.
-    if (command > 32) startRequested = true;
+    if (command == 'T' || command == 't') {
+      testRunning = true;
+      testStartedAt = millis();
+      Serial.println("# TEST=STARTED");
+      Serial.println("# PHASE_1=0..10s NATURAL_BACKGROUND");
+      Serial.println("# PHASE_2=10..20s TONE_400_NEAR_A");
+      Serial.println("# PHASE_3=20..30s TONE_400_SIDE");
+    }
   }
-
-  if (startRequested) startControlledTest();
 }
 
 uint32_t getTestElapsedMs() {
@@ -874,26 +756,10 @@ const char *getTestPhase() {
 
   uint32_t elapsed = getTestElapsedMs();
 
-  if (elapsed < TEST_BACKGROUND_END_MS) return "BACKGROUND";
-  if (elapsed < TEST_ANGLE_0_END_MS) return "ANGLE_0";
-  if (elapsed < TEST_ANGLE_45_END_MS) return "ANGLE_45";
-  if (elapsed < TEST_ANGLE_90_END_MS) return "ANGLE_90";
-  if (elapsed < TEST_ANGLE_135_END_MS) return "ANGLE_135";
-  if (elapsed < TEST_ANGLE_180_END_MS) return "ANGLE_180";
-  if (elapsed < TEST_ANGLE_225_END_MS) return "ANGLE_225";
-  if (elapsed < TEST_ANGLE_270_END_MS) return "ANGLE_270";
-  if (elapsed < TEST_ANGLE_315_END_MS) return "ANGLE_315";
+  if (elapsed < 10000) return "BACKGROUND";
+  if (elapsed < 20000) return "NEAR_A";
+  if (elapsed < 30000) return "SIDE";
   return "DONE";
-}
-
-void updateTestState() {
-  if (!testRunning) return;
-  if (getTestElapsedMs() < TEST_ANGLE_315_END_MS) return;
-
-  testRunning = false;
-  testStartedAt = 0;
-  Serial.println("# TEST=DONE");
-  Serial.println("# TEST_PHASE=WAIT TEST_MS=0");
 }
 
 void drawStaticInterface() {
@@ -903,7 +769,7 @@ void drawStaticInterface() {
   tft.setTextSize(2);
   tft.setTextColor(ST77XX_WHITE, ST77XX_RED);
   tft.setCursor(6, 5);
-  tft.print("DIR GATE RADAR");
+  tft.print("MASKED RADAR");
 
   tft.drawRect(0, 25, 240, 42, ST77XX_WHITE);
   tft.drawRect(0, 67, 120, 63, ST77XX_WHITE);
@@ -915,7 +781,7 @@ void drawStaticInterface() {
   tft.setTextSize(1);
   tft.setTextColor(ST77XX_WHITE, ST77XX_RED);
   tft.setCursor(5, 304);
-  tft.print("DIR GATE: 0..6 dB");
+  tft.print("SEND T: 10s + 10s + 10s");
 }
 
 void drawNoData() {
@@ -949,12 +815,9 @@ void drawChannelCell(
   tft.print(rmsText);
 
   tft.setCursor(x + 6, y + 43);
-  tft.print("4/1/2K ");
-  tft.print(frame.tone400Level / 10);
-  tft.print("/");
-  tft.print(frame.tone1000Level / 10);
-  tft.print("/");
-  tft.print(frame.tone2000Level / 10);
+  tft.print("400 ");
+  formatCompact(frame.tone400Amplitude, rmsText, sizeof(rmsText));
+  tft.print(rmsText);
 
   tft.setCursor(x + 6, y + 54);
   tft.print("LVL ");
@@ -1046,33 +909,29 @@ void updateScreen() {
   tft.print(currentFrame.effectiveGain, 3);
 
   tft.setCursor(6, 164);
-  tft.print("C-MASK ");
+  tft.print("MASK ");
   tft.print(currentFrame.correlationMask, 2);
-  tft.print(" D-MASK ");
-  tft.print(currentFrame.directionMask, 2);
+  tft.print(" COMMON ");
+  tft.print(currentFrame.commonScore, 0);
 
   tft.setCursor(6, 178);
-  tft.print("DIR dB ");
-  tft.print(currentFrame.directionDb, 1);
+  tft.print("DIR ");
+  tft.print(currentFrame.directionalScore, 0);
   tft.print(" BACK ");
   tft.print(currentFrame.backgroundScore, 0);
 
   tft.setCursor(6, 191);
-  tft.print("TGT ");
+  tft.print("TARGET ");
   tft.print(currentFrame.target.rms);
-  tft.print(" 4/1/2K ");
-  tft.print(currentFrame.target.tone400Level / 10);
-  tft.print("/");
-  tft.print(currentFrame.target.tone1000Level / 10);
-  tft.print("/");
-  tft.print(currentFrame.target.tone2000Level / 10);
+  tft.print(" 400 ");
+  tft.print(currentFrame.target.tone400Amplitude, 0);
 
   drawTargetWave();
 }
 
 void printFrameLine(const char *prefix, const AudioFrame &frame) {
   Serial.printf(
-    "%s T_MS=%lu ID=%lu COUNT=%d MEAN=%ld MIN=%ld MAX=%ld RMS=%ld PEAK=%ld P2P=%ld LEVEL=%d CLIP=%d TONE400_AMP=%.1f TONE400_LEVEL=%u TONE1000_AMP=%.1f TONE1000_LEVEL=%u TONE2000_AMP=%.1f TONE2000_LEVEL=%u DOM_HZ=%.1f DOM_AMP=%.1f SPEC_MAX=%.1f READ_ERR=%lu FPS=%.1f\n",
+    "%s T_MS=%lu ID=%lu COUNT=%d MEAN=%ld MIN=%ld MAX=%ld RMS=%ld PEAK=%ld P2P=%ld LEVEL=%d CLIP=%d TONE400_AMP=%.1f TONE400_LEVEL=%u DOM_HZ=%.1f DOM_AMP=%.1f SPEC_MAX=%.1f READ_ERR=%lu FPS=%.1f\n",
     prefix,
     (unsigned long)currentFrame.timeMs,
     (unsigned long)currentFrame.frameNumber,
@@ -1087,10 +946,6 @@ void printFrameLine(const char *prefix, const AudioFrame &frame) {
     frame.clip,
     frame.tone400Amplitude,
     frame.tone400Level,
-    frame.tone1000Amplitude,
-    frame.tone1000Level,
-    frame.tone2000Amplitude,
-    frame.tone2000Level,
     frame.dominantFrequency,
     frame.dominantAmplitude,
     frame.spectrumMaximum,
@@ -1137,7 +992,7 @@ void printSerialFrame() {
   printFrameLine("FRAME_TARGET", currentFrame.target);
 
   Serial.printf(
-    "COMPARE T_MS=%lu ID=%lu TEST_MS=%lu TEST_PHASE=%s BEST_LAG=%d CORR_RAW=%.6f CORR_ALIGNED=%.6f CORR_MASK=%.6f GAIN_CANDIDATE=%.6f GAIN_K=%.6f EFFECTIVE_K=%.6f GAIN_UPDATED=%d RMS_RATIO_AB=%.6f DIR_DB=%.6f DIR_MASK=%.6f RESIDUAL_RATIO=%.6f TONE400_RATIO_AB=%.6f TONE400_TARGET_RATIO=%.6f TONE1000_RATIO_AB=%.6f TONE1000_TARGET_RATIO=%.6f TONE2000_RATIO_AB=%.6f TONE2000_TARGET_RATIO=%.6f COMMON_SCORE=%.3f DIRECTIONAL_SCORE=%.3f BACKGROUND_SCORE=%.3f\n",
+    "COMPARE T_MS=%lu ID=%lu TEST_MS=%lu TEST_PHASE=%s BEST_LAG=%d CORR_RAW=%.6f CORR_ALIGNED=%.6f CORR_MASK=%.6f GAIN_CANDIDATE=%.6f GAIN_K=%.6f EFFECTIVE_K=%.6f GAIN_UPDATED=%d RMS_RATIO_AB=%.6f RESIDUAL_RATIO=%.6f TONE400_RATIO_AB=%.6f TONE400_TARGET_RATIO=%.6f COMMON_SCORE=%.3f DIRECTIONAL_SCORE=%.3f BACKGROUND_SCORE=%.3f\n",
     (unsigned long)currentFrame.timeMs,
     (unsigned long)currentFrame.frameNumber,
     (unsigned long)getTestElapsedMs(),
@@ -1151,15 +1006,9 @@ void printSerialFrame() {
     currentFrame.effectiveGain,
     currentFrame.gainUpdated ? 1 : 0,
     currentFrame.rmsRatioAB,
-    currentFrame.directionDb,
-    currentFrame.directionMask,
     currentFrame.residualRatio,
-    currentFrame.tone400RatioAB,
-    currentFrame.tone400TargetRatio,
-    currentFrame.tone1000RatioAB,
-    currentFrame.tone1000TargetRatio,
-    currentFrame.tone2000RatioAB,
-    currentFrame.tone2000TargetRatio,
+    currentFrame.toneRatioAB,
+    currentFrame.toneTargetRatio,
     currentFrame.commonScore,
     currentFrame.directionalScore,
     currentFrame.backgroundScore
@@ -1181,19 +1030,13 @@ void setup() {
   delay(800);
 
   Serial.println();
-  Serial.println("# ESP32 RADAR MASKED ADAPTIVE MULTITONE");
-  Serial.println("# FIRMWARE_VERSION=ANGLE_GATE_2000HZ_V5_FULL_CIRCLE");
-  Serial.println("# CHANNEL_ORDER=NATIVE");
+  Serial.println("# ESP32 RADAR MASKED ADAPTIVE TWO MICROPHONE");
   Serial.println("# CHANNEL_A=LEFT DIRECTIONAL");
   Serial.println("# CHANNEL_B=RIGHT OPEN_BACKGROUND");
-  Serial.println("# TARGET=DIR_MASK*(A-EFFECTIVE_K*ALIGNED_B)");
-  Serial.println("# TEST_TONES_HZ=400,1000,2000");
-  Serial.println("# SEND_ANY_PRINTABLE_CHARACTER_TO_START_TEST");
-  Serial.println("# SERIAL_STREAM=TEST_ONLY");
-  Serial.println("# ADAPTIVE_GAIN=BACKGROUND_ONLY_THEN_FROZEN");
-  Serial.println("# DIRECTION_GATE=RMS_A_OVER_B_SOFTSTEP");
-  Serial.printf("# DIRECTION_GATE_DB_LOW=%.1f DIRECTION_GATE_DB_HIGH=%.1f\n", DIRECTION_DB_LOW, DIRECTION_DB_HIGH);
-  Serial.println("# TEST=0..10s_BACKGROUND_TRAIN 10..20s_A0 20..30s_A45 30..40s_A90 40..50s_A135 50..60s_A180 60..70s_A225 70..80s_A270 80..90s_A315");
+  Serial.println("# TARGET=A-EFFECTIVE_K*ALIGNED_B");
+  Serial.println("# TEST_TONE_HZ=400.0");
+  Serial.println("# SEND_T_TO_START_30_SECOND_TEST");
+  Serial.println("# 0..10s=BACKGROUND 10..20s=NEAR_A 20..30s=SIDE");
 
   Serial.printf(
     "# SAMPLE_RATE=%d READ_SAMPLES=%d MAX_LAG=%d GAIN_START=%.3f MASK_LOW=%.2f MASK_HIGH=%.2f\n",
@@ -1219,7 +1062,6 @@ void setup() {
     Serial.println("# MIC=WARMUP");
     warmUpMicrophones();
     Serial.println("# MIC=READY");
-    Serial.println("# TEST_PHASE=WAIT TEST_MS=0");
   } else {
     Serial.println("# MIC=I2S_ERROR");
   }
@@ -1229,7 +1071,6 @@ void setup() {
 
 void loop() {
   handleSerialCommands();
-  updateTestState();
 
   if (!micReady) {
     drawNoData();
@@ -1242,7 +1083,7 @@ void loop() {
 
   if (!frameOk) return;
 
-  if (testRunning && currentFrame.frameNumber % SERIAL_EVERY_FRAMES == 0) {
+  if (currentFrame.frameNumber % SERIAL_EVERY_FRAMES == 0) {
     printSerialFrame();
   }
 
